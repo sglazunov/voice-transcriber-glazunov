@@ -39,6 +39,8 @@ async def create_job(
     file: UploadFile = File(...),
     language: str = Form(config.DEFAULT_LANGUAGE),
     diarize: bool = Form(False),
+    hint: str = Form(""),
+    glossary: str = Form(""),
 ):
     ext = Path(file.filename or "").suffix.lower()
     if ext not in ALLOWED_EXT:
@@ -57,7 +59,8 @@ async def create_job(
             out.write(chunk)
 
     want_diar = diarize and config.DIARIZATION_ENABLED
-    job = store.create(file.filename, str(dest), language, want_diar)
+    job = store.create(file.filename, str(dest), language, want_diar,
+                       initial_prompt=hint.strip(), glossary=glossary.strip())
     return JSONResponse({"job_id": job.id, **job.to_public()}, status_code=201)
 
 

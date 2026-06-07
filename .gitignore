@@ -7,5 +7,6 @@ data_test/
 sample*.mp3
 sample*.wav
 test_video.mp4
-# local one-off helper with machine-specific paths
+# local one-off helpers with machine-specific paths
 transcribe_meeting.py
+transcribe_video.py

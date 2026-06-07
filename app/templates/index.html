@@ -26,6 +26,11 @@
     .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-top:12px}
     select{padding:9px 10px;border-radius:10px;border:1px solid var(--line);
            background:#0b1220;color:var(--txt)}
+    textarea{width:100%;padding:10px;border-radius:10px;border:1px solid var(--line);
+             background:#0b1220;color:var(--txt);font-family:inherit;font-size:13px;resize:vertical;margin-bottom:8px}
+    details.adv{margin-top:12px;border:1px solid var(--line);border-radius:10px;padding:8px 12px;background:var(--card2)}
+    details.adv summary{cursor:pointer;font-size:13px;color:var(--muted);user-select:none}
+    details.adv label{margin-top:8px}
     .chk{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
     button{background:linear-gradient(90deg,var(--accent),var(--accent2));color:#04212f;
            border:0;font-weight:700;padding:11px 20px;border-radius:11px;cursor:pointer;font-size:14px}
@@ -83,6 +88,14 @@
       </label>
       <button id="go" disabled>Распознать</button>
     </div>
+
+    <details class="adv">
+      <summary>🎯 Точность: имена и термины (необязательно)</summary>
+      <label>Известные имена и термины — через запятую (модель будет писать их правильно)</label>
+      <textarea id="hint" rows="2" placeholder="Сергей Коновалов, дизайнер Петрова, модуль документов, gRPC, Kafka"></textarea>
+      <label>Замены «как слышится → правильно» — по одной на строку</label>
+      <textarea id="glossary" rows="3" placeholder="Конид = Коновалов&#10;джиэрписи = gRPC&#10;кафка = Kafka"></textarea>
+    </details>
 
     <div id="upwrap" class="hidden" style="margin-top:14px">
       <div class="muted" id="upmsg">Загрузка…</div>
@@ -144,6 +157,8 @@ $("go").onclick=()=>{
   fd.append("file",selected);
   fd.append("language",$("language").value);
   fd.append("diarize",$("diarize").checked?"true":"false");
+  fd.append("hint",$("hint").value);
+  fd.append("glossary",$("glossary").value);
   const xhr=new XMLHttpRequest();
   xhr.open("POST","/api/jobs");
   $("upwrap").classList.remove("hidden");$("go").disabled=true;

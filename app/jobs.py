@@ -18,7 +18,7 @@ from dataclasses import dataclass, asdict, field
 from pathlib import Path
 from typing import Dict, Optional
 
-from . import config, formats
+from . import config, formats, glossary
 from .transcribe import transcribe_file
 
 STATUS_QUEUED = "queued"
@@ -34,6 +34,8 @@ class Job:
     audio_path: str
     language: str
     diarize: bool
+    initial_prompt: str = ""       # known names/terms to bias spelling
+    glossary: str = ""             # "wrong=right" replacement rules
     status: str = STATUS_QUEUED
     progress: float = 0.0          # 0..1
     created_at: float = field(default_factory=time.time)
@@ -83,13 +85,16 @@ class JobStore:
         tmp.replace(config.JOBS_FILE)
 
     # ---- public API --------------------------------------------------------
-    def create(self, filename: str, audio_path: str, language: str, diarize: bool) -> Job:
+    def create(self, filename: str, audio_path: str, language: str, diarize: bool,
+               initial_prompt: str = "", glossary: str = "") -> Job:
         job = Job(
             id=uuid.uuid4().hex[:12],
             filename=filename,
             audio_path=audio_path,
             language=language,
             diarize=diarize,
+            initial_prompt=initial_prompt,
+            glossary=glossary,
         )
         with self._lock:
             self._jobs[job.id] = job
@@ -137,14 +142,20 @@ class JobStore:
         self._partial[job.id] = []
         try:
             partial = self._partial[job.id]
+            rules = glossary.parse(job.glossary)
 
             def on_segment(seg, total: float) -> None:
+                # Apply the correction glossary in place so both the live stream
+                # and the final transcript get the fixed spelling.
+                if rules:
+                    seg.text = glossary.apply(seg.text, rules)
                 partial.append({"start": seg.start, "end": seg.end, "text": seg.text})
                 if total > 0:
                     self._set(job, persist=False, progress=min(seg.end / total, 0.999))
 
             segments, meta = transcribe_file(
-                job.audio_path, language=job.language, on_segment=on_segment
+                job.audio_path, language=job.language, on_segment=on_segment,
+                initial_prompt=job.initial_prompt,
             )
 
             n_speakers = None
