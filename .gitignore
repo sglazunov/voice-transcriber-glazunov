@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+data/
+data_test/
+# local test artifacts
+sample*.mp3
+sample*.wav
+test_video.mp4
+# local one-off helper with machine-specific paths
+transcribe_meeting.py
