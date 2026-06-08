@@ -44,6 +44,7 @@ def transcribe_file(
     audio_path: str,
     language: Optional[str] = None,
     on_segment: Optional[Callable[["Segment", float], None]] = None,
+    on_start: Optional[Callable[[], None]] = None,
     initial_prompt: Optional[str] = None,
 ) -> tuple[List[Segment], dict]:
     """Transcribe an audio or video file.
@@ -51,9 +52,8 @@ def transcribe_file(
     Video files (mp4/mkv/…) work directly — faster-whisper decodes the audio
     stream via PyAV/ffmpeg.
 
-    initial_prompt seeds the model with known proper nouns / terms (names,
-    surnames, product names) so it spells them correctly instead of guessing
-    phonetically.
+    on_start() is called after the model loads and transcription begins,
+    so the UI can show that work is in progress before the first segment arrives.
 
     on_segment(segment, total_seconds) is called for every segment as it is
     produced (faster-whisper yields them lazily), so the UI can stream the
@@ -69,6 +69,8 @@ def transcribe_file(
     )
 
     total = float(getattr(info, "duration", 0.0) or 0.0)
+    if on_start:
+        on_start()
     out: List[Segment] = []
     for seg in segments_iter:
         s = Segment(start=seg.start, end=seg.end, text=seg.text.strip())

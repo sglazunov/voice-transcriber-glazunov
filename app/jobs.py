@@ -144,6 +144,9 @@ class JobStore:
             partial = self._partial[job.id]
             rules = glossary.parse(job.glossary)
 
+            def on_start() -> None:
+                self._set(job, persist=False, progress=0.01)
+
             def on_segment(seg, total: float) -> None:
                 # Apply the correction glossary in place so both the live stream
                 # and the final transcript get the fixed spelling.
@@ -155,7 +158,7 @@ class JobStore:
 
             segments, meta = transcribe_file(
                 job.audio_path, language=job.language, on_segment=on_segment,
-                initial_prompt=job.initial_prompt,
+                on_start=on_start, initial_prompt=job.initial_prompt,
             )
 
             n_speakers = None

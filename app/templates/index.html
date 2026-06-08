@@ -207,9 +207,18 @@ async function updateLive(){
   if(job.speakers){$("lspkwrap").classList.remove("hidden");$("lspk").textContent=job.speakers;}
 
   if(job.status==="running"){
-    if(!startTs)startTs=Date.now()-((job.progress||0)*0);startTimer();
-    const p=await(await fetch(`/api/jobs/${viewId}/partial`)).json();
-    renderSegments($("live"),p.segments||[]);
+    if(!startTs)startTs=Date.now();startTimer();
+    try{
+      const p=await(await fetch(`/api/jobs/${viewId}/partial`)).json();
+      const segs=p.segments||[];
+      if(!segs.length){
+        const pct=job.progress||0;
+        const msg=pct===0?"Загрузка модели…":"Анализ аудио, первые сегменты скоро появятся…";
+        $("live").innerHTML=`<div class="empty">${msg}</div>`;
+      }else{
+        renderSegments($("live"),segs);
+      }
+    }catch{}
     $("ltools").innerHTML="";
   }else if(job.status==="done"){
     stopTimer();
@@ -238,7 +247,7 @@ async function copyText(){
 /* ---------- history ---------- */
 async function refresh(){
   let jobs=[];
-  try{jobs=await(await fetch("/api/jobs")).json();}catch{return;}
+  try{const r=await fetch("/api/jobs");if(!r.ok)return;jobs=await r.json();}catch{return;}
   // auto-pick active job to show live
   const active=jobs.find(j=>j.status==="running")||jobs.find(j=>j.status==="queued");
   if(active){if(activeId!==active.id){activeId=active.id;startTs=null;}if(!viewId)viewId=active.id;}
