@@ -6,7 +6,8 @@
   <title>Распознавание речи</title>
   <style>
     :root{--bg:#0b1220;--card:#151f33;--card2:#0f1830;--accent:#38bdf8;--accent2:#22d3ee;
-          --txt:#e6edf6;--muted:#8aa0bd;--line:#26344f;--ok:#16a34a;--err:#dc2626;}
+          --txt:#e6edf6;--muted:#8aa0bd;--line:#26344f;--ok:#16a34a;--err:#dc2626;
+          --warn:#d97706;}
     *{box-sizing:border-box}
     body{margin:0;background:linear-gradient(180deg,#0b1220,#0a1020);color:var(--txt);
          font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;}
@@ -16,6 +17,16 @@
     .card{background:var(--card);border:1px solid var(--line);border-radius:16px;
           padding:18px;margin-bottom:18px}
     .card h2{font-size:15px;margin:0 0 12px;font-weight:600}
+
+    /* mode toggle */
+    .mode-toggle{display:flex;gap:0;border:1px solid var(--line);border-radius:12px;
+                 overflow:hidden;margin-bottom:16px;width:fit-content}
+    .mode-toggle button{background:transparent;border:none;color:var(--muted);
+                        padding:9px 18px;font-size:13px;cursor:pointer;font-weight:500;
+                        transition:.15s}
+    .mode-toggle button.active{background:var(--accent);color:#04212f;font-weight:700}
+    .mode-toggle button:disabled{opacity:.4;cursor:not-allowed}
+
     /* dropzone */
     #drop{border:2px dashed var(--line);border-radius:14px;padding:26px;text-align:center;
           cursor:pointer;transition:.2s;background:var(--card2)}
@@ -28,13 +39,14 @@
            background:#0b1220;color:var(--txt)}
     textarea{width:100%;padding:10px;border-radius:10px;border:1px solid var(--line);
              background:#0b1220;color:var(--txt);font-family:inherit;font-size:13px;resize:vertical;margin-bottom:8px}
-    details.adv{margin-top:12px;border:1px solid var(--line);border-radius:10px;padding:8px 12px;background:var(--card2)}
+    details.adv{margin-top:12px;border:1px solid var(--line);border-radius:10px;
+                padding:8px 12px;background:var(--card2)}
     details.adv summary{cursor:pointer;font-size:13px;color:var(--muted);user-select:none}
-    details.adv label{margin-top:8px}
     .chk{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
-    button{background:linear-gradient(90deg,var(--accent),var(--accent2));color:#04212f;
+    button.go{background:linear-gradient(90deg,var(--accent),var(--accent2));color:#04212f;
            border:0;font-weight:700;padding:11px 20px;border-radius:11px;cursor:pointer;font-size:14px}
-    button.ghost{background:#1b2740;color:var(--txt);border:1px solid var(--line);font-weight:600}
+    button.ghost{background:#1b2740;color:var(--txt);border:1px solid var(--line);
+                 font-weight:600;padding:9px 16px;border-radius:10px;cursor:pointer;font-size:13px}
     button:disabled{opacity:.5;cursor:not-allowed}
     .bar{height:10px;background:#0b1220;border-radius:8px;overflow:hidden;border:1px solid var(--line)}
     .bar>i{display:block;height:100%;width:0;border-radius:8px;
@@ -42,19 +54,41 @@
     .meta{display:flex;gap:16px;flex-wrap:wrap;color:var(--muted);font-size:12px;margin:10px 0}
     .meta b{color:var(--txt)}
     .badge{font-size:11px;padding:3px 9px;border-radius:999px;font-weight:600}
-    .queued{background:#334155}.running{background:#0369a1}.done{background:#15803d}.error{background:#7f1d1d}
+    .queued{background:#334155}.running{background:#0369a1}.analyzing{background:#7c3aed}
+    .done{background:#15803d}.error{background:#7f1d1d}
     .live{margin-top:14px;background:var(--card2);border:1px solid var(--line);border-radius:12px;
-          padding:12px;max-height:340px;overflow:auto;font-size:14px;line-height:1.6}
-    .seg{margin:0 0 6px}.seg .t{color:var(--accent);font-variant-numeric:tabular-nums;font-size:12px;margin-right:8px}
+          padding:12px;max-height:300px;overflow:auto;font-size:14px;line-height:1.6}
+    .seg{margin:0 0 6px}.seg .t{color:var(--accent);font-variant-numeric:tabular-nums;
+                                 font-size:12px;margin-right:8px}
     .spk{color:var(--accent2);font-weight:700;margin-top:10px}
     .empty{color:var(--muted);font-size:13px}
+
+    /* analysis block */
+    .analysis{margin-top:18px}
+    .analysis-section{background:var(--card2);border:1px solid var(--line);
+                       border-radius:12px;padding:14px;margin-bottom:12px}
+    .analysis-section h3{font-size:13px;color:var(--accent);margin:0 0 8px;
+                          text-transform:uppercase;letter-spacing:.05em;font-weight:700}
+    .analysis-section p{margin:0;font-size:14px;line-height:1.6}
+    .analysis-section ul,.analysis-section ol{margin:0;padding-left:20px;font-size:14px;line-height:1.8}
+    .analysis-section li{margin-bottom:2px}
+    .analysis-err{color:var(--warn);font-size:13px;padding:10px;background:#1c1208;
+                  border:1px solid #4a3200;border-radius:10px;margin-top:10px}
+    .spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--line);
+             border-top-color:var(--accent);border-radius:50%;
+             animation:spin .7s linear infinite;margin-right:6px;vertical-align:middle}
+    @keyframes spin{to{transform:rotate(360deg)}}
+
     table{width:100%;border-collapse:collapse;font-size:13px}
     th,td{text-align:left;padding:9px 6px;border-bottom:1px solid var(--line);vertical-align:middle}
     th{color:var(--muted);font-weight:500}
-    a.dl{color:var(--accent);text-decoration:none;margin-right:10px}
+    a.dl{color:var(--accent);text-decoration:none;margin-right:10px;cursor:pointer}
     .muted{color:var(--muted);font-size:12px}
-    .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+    .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;align-items:center}
     .hidden{display:none}
+    .api-notice{background:#0d1624;border:1px solid var(--line);border-radius:10px;
+                padding:10px 14px;font-size:12px;color:var(--muted);margin-top:10px}
+    .api-notice code{color:var(--accent);font-family:monospace}
   </style>
 </head>
 <body>
@@ -62,10 +96,28 @@
   <h1>🎙️ Распознавание речи</h1>
   <div class="sub">Модель <b>{{ model }}</b> · faster-whisper · аудио и видео · до {{ (max_upload_mb/1024)|round(1) }} ГБ</div>
 
-  <!-- Upload -->
+  <!-- Upload card -->
   <div class="card">
     <h2>Новый файл</h2>
-    <div id="drop">
+
+    <!-- Mode toggle -->
+    <div class="mode-toggle">
+      <button id="modeTranscribe" class="active" onclick="setMode('transcribe')">
+        🎙 Только распознавание
+      </button>
+      <button id="modeProtocol" onclick="setMode('protocol')"
+        {% if not analysis_enabled %}disabled title="Задайте ANTHROPIC_API_KEY в run.bat"{% endif %}>
+        📄 Протокол встречи
+      </button>
+    </div>
+    {% if not analysis_enabled %}
+    <div class="api-notice">
+      Режим «Протокол» требует API-ключ Claude.
+      Добавьте в <b>run.bat</b>: <code>set ANTHROPIC_API_KEY=sk-ant-...</code>
+    </div>
+    {% endif %}
+
+    <div id="drop" style="margin-top:14px">
       <div class="big">📁 Перетащи сюда аудио или видео — или нажми, чтобы выбрать</div>
       <div class="hint">mp3, wav, m4a, ogg, opus · mp4, mkv, webm, mov — до {{ (max_upload_mb/1024)|round(1) }} ГБ</div>
     </div>
@@ -86,13 +138,13 @@
         <input type="checkbox" id="diarize" {% if not diarization_enabled %}disabled{% endif %}>
         Кто говорил {% if not diarization_enabled %}<span class="muted">(выключено)</span>{% endif %}
       </label>
-      <button id="go" disabled>Распознать</button>
+      <button class="go" id="go" disabled>Распознать</button>
     </div>
 
     <details class="adv">
       <summary>🎯 Точность: имена и термины (необязательно)</summary>
-      <label>Известные имена и термины — через запятую (модель будет писать их правильно)</label>
-      <textarea id="hint" rows="2" placeholder="Сергей Коновалов, дизайнер Петрова, модуль документов, gRPC, Kafka"></textarea>
+      <label>Известные имена и термины — через запятую</label>
+      <textarea id="hint" rows="2" placeholder="Сергей Коновалов, дизайнер Петрова, gRPC, Kafka"></textarea>
       <label>Замены «как слышится → правильно» — по одной на строку</label>
       <textarea id="glossary" rows="3" placeholder="Конид = Коновалов&#10;джиэрписи = gRPC&#10;кафка = Kafka"></textarea>
     </details>
@@ -115,6 +167,10 @@
     </div>
     <div class="bar"><i id="lbar"></i></div>
     <div class="live" id="live"><div class="empty">Ожидание текста…</div></div>
+
+    <!-- Analysis result block -->
+    <div class="analysis hidden" id="analysisBlock"></div>
+
     <div class="toolbar" id="ltools"></div>
   </div>
 
@@ -129,13 +185,23 @@
 </div>
 
 <script>
-const STATUS={queued:"в очереди",running:"распознаётся",done:"готово",error:"ошибка"};
+const STATUS={queued:"в очереди",running:"распознаётся",analyzing:"анализируется",done:"готово",error:"ошибка"};
 const $=id=>document.getElementById(id);
+let curMode='transcribe';
 let selected=null, activeId=null, viewId=null, startTs=null, elapsedTimer=null;
 
+/* ---------- mode toggle ---------- */
+function setMode(m){
+  curMode=m;
+  $('modeTranscribe').classList.toggle('active',m==='transcribe');
+  $('modeProtocol').classList.toggle('active',m==='protocol');
+}
+
+/* ---------- helpers ---------- */
 function human(s){if(!s&&s!==0)return"";s=Math.round(s);const h=(s/3600|0),m=(s%3600/60|0),x=s%60;
   return (h?String(h).padStart(2,"0")+":":"")+String(m).padStart(2,"0")+":"+String(x).padStart(2,"0");}
 function mb(b){return (b/1048576).toFixed(1)+" МБ";}
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
 /* ---------- file selection ---------- */
 const drop=$("drop"), fileEl=$("file");
@@ -146,7 +212,7 @@ drop.addEventListener("drop",ev=>{if(ev.dataTransfer.files.length){fileEl.files=
 fileEl.onchange=pickFile;
 function pickFile(){
   selected=fileEl.files[0]||null;
-  if(selected){$("fileinfo").innerHTML=`<span>📄 ${selected.name}</span><span>${mb(selected.size)}</span>`;$("go").disabled=false;}
+  if(selected){$("fileinfo").innerHTML=`<span>📄 ${esc(selected.name)}</span><span>${mb(selected.size)}</span>`;$("go").disabled=false;}
   else{$("fileinfo").textContent="";$("go").disabled=true;}
 }
 
@@ -157,6 +223,7 @@ $("go").onclick=()=>{
   fd.append("file",selected);
   fd.append("language",$("language").value);
   fd.append("diarize",$("diarize").checked?"true":"false");
+  fd.append("analyze",curMode==='protocol'?"true":"false");
   fd.append("hint",$("hint").value);
   fd.append("glossary",$("glossary").value);
   const xhr=new XMLHttpRequest();
@@ -178,26 +245,69 @@ $("go").onclick=()=>{
   xhr.send(fd);
 };
 
-/* ---------- live rendering ---------- */
+/* ---------- live segments ---------- */
 function renderSegments(el,segs){
   if(!segs.length){el.innerHTML='<div class="empty">Ожидание текста…</div>';return;}
   let html="",lastSpk=null;
   for(const s of segs){
-    if(s.speaker&&s.speaker!==lastSpk){html+=`<div class="spk">${s.speaker}</div>`;lastSpk=s.speaker;}
-    html+=`<div class="seg"><span class="t">${human(s.start)}</span>${s.text}</div>`;
+    if(s.speaker&&s.speaker!==lastSpk){html+=`<div class="spk">${esc(s.speaker)}</div>`;lastSpk=s.speaker;}
+    html+=`<div class="seg"><span class="t">${human(s.start)}</span>${esc(s.text)}</div>`;
   }
   const atBottom=el.scrollHeight-el.scrollTop-el.clientHeight<60;
   el.innerHTML=html;
   if(atBottom)el.scrollTop=el.scrollHeight;
 }
+
+/* ---------- analysis block ---------- */
+function renderAnalysis(job){
+  const block=$('analysisBlock');
+  if(!job.analyze){block.classList.add('hidden');return;}
+
+  if(job.status==='analyzing'){
+    block.classList.remove('hidden');
+    block.innerHTML=`<div class="analysis-section"><h3>Анализ</h3>
+      <p><span class="spinner"></span>Модель анализирует транскрипцию…</p></div>`;
+    return;
+  }
+  if(job.status!=='done'){block.classList.add('hidden');return;}
+
+  block.classList.remove('hidden');
+  const a=job.analysis||{};
+  const err=job.analysis_error;
+
+  let html='';
+  if(err){
+    html+=`<div class="analysis-err">⚠ Ошибка анализа: ${esc(err.split('\n').pop())}</div>`;
+  } else if(a.summary){
+    html+=`<div class="analysis-section"><h3>О чём шёл разговор</h3><p>${esc(a.summary)}</p></div>`;
+
+    if(a.key_thoughts&&a.key_thoughts.length){
+      const items=a.key_thoughts.map(t=>`<li>${esc(t)}</li>`).join('');
+      html+=`<div class="analysis-section"><h3>Ключевые мысли</h3><ul>${items}</ul></div>`;
+    }
+    if(a.tasks&&a.tasks.length){
+      const items=a.tasks.map(t=>`<li>☐ ${esc(t)}</li>`).join('');
+      html+=`<div class="analysis-section"><h3>Задачи</h3><ol>${items}</ol></div>`;
+    } else {
+      html+=`<div class="analysis-section"><h3>Задачи</h3><p class="empty">Задач не выявлено</p></div>`;
+    }
+  }
+  block.innerHTML=html;
+}
+
+/* ---------- timer ---------- */
 function startTimer(){stopTimer();elapsedTimer=setInterval(()=>{
   if(startTs)$("lelapsed").textContent=human((Date.now()-startTs)/1000);},1000);}
 function stopTimer(){if(elapsedTimer){clearInterval(elapsedTimer);elapsedTimer=null;}}
 
+/* ---------- live card update ---------- */
 async function updateLive(){
   if(!viewId){$("livecard").classList.add("hidden");return;}
-  const job=(await(await fetch("/api/jobs")).json()).find(j=>j.id===viewId);
+  let jobs=[];
+  try{const r=await fetch("/api/jobs");if(!r.ok)return;jobs=await r.json();}catch{return;}
+  const job=jobs.find(j=>j.id===viewId);
   if(!job){$("livecard").classList.add("hidden");return;}
+
   $("livecard").classList.remove("hidden");
   $("livetitle").textContent=job.filename||"Распознавание";
   const sb=$("lstatus");sb.textContent=STATUS[job.status]||job.status;sb.className="badge "+job.status;
@@ -206,13 +316,14 @@ async function updateLive(){
   if(job.duration){$("ldurwrap").classList.remove("hidden");$("ldur").textContent=human(job.duration);}
   if(job.speakers){$("lspkwrap").classList.remove("hidden");$("lspk").textContent=job.speakers;}
 
+  renderAnalysis(job);
+
   if(job.status==="running"){
     if(!startTs)startTs=Date.now();startTimer();
     try{
       const p=await(await fetch(`/api/jobs/${viewId}/partial`)).json();
       const segs=p.segments||[];
       if(!segs.length){
-        const pct=job.progress||0;
         const msg=pct===0?"Загрузка модели…":"Анализ аудио, первые сегменты скоро появятся…";
         $("live").innerHTML=`<div class="empty">${msg}</div>`;
       }else{
@@ -220,53 +331,81 @@ async function updateLive(){
       }
     }catch{}
     $("ltools").innerHTML="";
+
+  }else if(job.status==="analyzing"){
+    if(!startTs)startTs=Date.now();startTimer();
+    $("live").innerHTML='<div class="empty">Транскрипция завершена, строим протокол…</div>';
+    $("ltools").innerHTML="";
+
   }else if(job.status==="done"){
     stopTimer();
-    const txt=await(await fetch(`/api/jobs/${viewId}/result?format=txt`)).text();
-    $("live").innerHTML="";
-    const pre=document.createElement("div");pre.style.whiteSpace="pre-wrap";pre.textContent=txt;
-    $("live").appendChild(pre);
-    $("ltools").innerHTML=
-      `<button class="ghost" onclick="copyText()">📋 Копировать</button>`+
-      `<a class="dl" href="/api/jobs/${viewId}/result?format=txt" target="_blank">TXT</a>`+
-      `<a class="dl" href="/api/jobs/${viewId}/result?format=srt">SRT</a>`+
-      `<a class="dl" href="/api/jobs/${viewId}/result?format=json">JSON</a>`;
+    try{
+      const txt=await(await fetch(`/api/jobs/${viewId}/result?format=txt`)).text();
+      $("live").innerHTML="";
+      const pre=document.createElement("div");pre.style.whiteSpace="pre-wrap";pre.textContent=txt;
+      $("live").appendChild(pre);
+    }catch{}
+    let tools=`<button class="ghost" onclick="copyText()">📋 Копировать</button>
+      <a class="dl" href="/api/jobs/${viewId}/result?format=txt" target="_blank">TXT</a>
+      <a class="dl" href="/api/jobs/${viewId}/result?format=srt">SRT</a>
+      <a class="dl" href="/api/jobs/${viewId}/result?format=json">JSON</a>`;
+    if(job.analyze&&job.analysis&&!job.analysis_error){
+      tools+=`<a class="dl" href="/api/jobs/${viewId}/result?format=docx"
+               style="background:linear-gradient(90deg,#0ea5e9,#6366f1);color:#fff;
+                      padding:7px 14px;border-radius:8px;text-decoration:none;font-weight:600;
+                      font-size:13px;">📄 Скачать Word</a>`;
+    }
+    $("ltools").innerHTML=tools;
+
   }else if(job.status==="error"){
     stopTimer();
-    $("live").innerHTML=`<div class="empty">Ошибка: ${(job.error||"").split("\n").pop()}</div>`;
+    $("live").innerHTML=`<div class="empty">Ошибка: ${esc((job.error||"").split("\n").pop())}</div>`;
     $("ltools").innerHTML="";
   }else{
     $("live").innerHTML='<div class="empty">В очереди…</div>';
+    $("ltools").innerHTML="";
   }
 }
+
 async function copyText(){
-  const txt=await(await fetch(`/api/jobs/${viewId}/result?format=txt`)).text();
-  await navigator.clipboard.writeText(txt);
+  try{const txt=await(await fetch(`/api/jobs/${viewId}/result?format=txt`)).text();
+  await navigator.clipboard.writeText(txt);}catch{}
 }
 
-/* ---------- history ---------- */
+/* ---------- history table ---------- */
 async function refresh(){
   let jobs=[];
   try{const r=await fetch("/api/jobs");if(!r.ok)return;jobs=await r.json();}catch{return;}
-  // auto-pick active job to show live
-  const active=jobs.find(j=>j.status==="running")||jobs.find(j=>j.status==="queued");
+
+  const active=jobs.find(j=>j.status==="running"||j.status==="analyzing")||jobs.find(j=>j.status==="queued");
   if(active){if(activeId!==active.id){activeId=active.id;startTs=null;}if(!viewId)viewId=active.id;}
+
   $("jobs").innerHTML=jobs.map(j=>{
     const pct=Math.round((j.progress||0)*100);
     let act="";
-    if(j.status==="done")act=`<a class="dl" onclick="openJob('${j.id}')">Показать</a>
-      <a class="dl" href="/api/jobs/${j.id}/result?format=txt" target="_blank">TXT</a>
-      <a class="dl" href="/api/jobs/${j.id}/result?format=srt">SRT</a>`;
-    else if(j.status==="error")act=`<span class="muted" title="${(j.error||'').replace(/"/g,'&quot;')}">ошибка</span>`;
-    else act=`<a class="dl" onclick="openJob('${j.id}')">Следить</a>`;
+    if(j.status==="done"){
+      act=`<a class="dl" onclick="openJob('${j.id}')">Показать</a>
+           <a class="dl" href="/api/jobs/${j.id}/result?format=txt" target="_blank">TXT</a>
+           <a class="dl" href="/api/jobs/${j.id}/result?format=srt">SRT</a>`;
+      if(j.analyze&&j.analysis&&!j.analysis_error)
+        act+=`<a class="dl" href="/api/jobs/${j.id}/result?format=docx">Word</a>`;
+    }else if(j.status==="error"){
+      act=`<span class="muted" title="${esc((j.error||'').replace(/"/g,'&quot;'))}">ошибка</span>`;
+    }else{
+      act=`<a class="dl" onclick="openJob('${j.id}')">Следить</a>`;
+    }
+    const modeIcon=j.analyze?'📄 ':'🎙 ';
     return `<tr>
-      <td>${j.filename||""}<div class="muted">${j.duration?human(j.duration):""}</div></td>
+      <td>${modeIcon}${esc(j.filename||"")}
+        <div class="muted">${j.duration?human(j.duration):""}</div></td>
       <td><span class="badge ${j.status}">${STATUS[j.status]||j.status}</span></td>
       <td><div class="bar" style="min-width:90px"><i style="width:${pct}%"></i></div></td>
       <td>${act}</td></tr>`;
   }).join("")||`<tr><td colspan="4" class="empty">Пока пусто</td></tr>`;
+
   updateLive();
 }
+
 function openJob(id){viewId=id;startTs=null;updateLive();window.scrollTo({top:0,behavior:"smooth"});}
 
 refresh();

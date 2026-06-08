@@ -9,7 +9,7 @@ from fastapi.responses import HTMLResponse, PlainTextResponse, FileResponse, JSO
 from fastapi.templating import Jinja2Templates
 
 from . import config
-from .jobs import store, STATUS_DONE
+from .jobs import store, STATUS_DONE, STATUS_ANALYZING
 
 app = FastAPI(title="Voice Transcriber", version="1.0")
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
@@ -27,6 +27,7 @@ def index(request: Request):
             "request": request,
             "jobs": [j.to_public() for j in store.list()],
             "diarization_enabled": config.DIARIZATION_ENABLED,
+            "analysis_enabled": config.ANALYSIS_ENABLED,
             "model": config.MODEL,
             "max_upload_mb": config.MAX_UPLOAD_MB,
         },
@@ -39,6 +40,7 @@ async def create_job(
     file: UploadFile = File(...),
     language: str = Form(config.DEFAULT_LANGUAGE),
     diarize: bool = Form(False),
+    analyze: bool = Form(False),
     hint: str = Form(""),
     glossary: str = Form(""),
 ):
@@ -59,8 +61,10 @@ async def create_job(
             out.write(chunk)
 
     want_diar = diarize and config.DIARIZATION_ENABLED
+    want_analyze = analyze and config.ANALYSIS_ENABLED
     job = store.create(file.filename, str(dest), language, want_diar,
-                       initial_prompt=hint.strip(), glossary=glossary.strip())
+                       initial_prompt=hint.strip(), glossary=glossary.strip(),
+                       analyze=want_analyze)
     return JSONResponse({"job_id": job.id, **job.to_public()}, status_code=201)
 
 
@@ -95,16 +99,22 @@ def get_result(job_id: str, format: str = "txt"):
     job = store.get(job_id)
     if not job:
         raise HTTPException(404, "Задача не найдена")
-    if job.status != STATUS_DONE:
+    if job.status not in {STATUS_DONE}:
         raise HTTPException(409, f"Задача ещё не готова (статус: {job.status})")
-    if format not in {"txt", "srt", "json"}:
-        raise HTTPException(400, "format должен быть txt | srt | json")
+    if format not in {"txt", "srt", "json", "docx"}:
+        raise HTTPException(400, "format должен быть txt | srt | json | docx")
 
     path = store.result_path(job_id, format)
     if not path.exists():
         raise HTTPException(404, "Результат отсутствует")
     if format == "txt":
         return PlainTextResponse(path.read_text(encoding="utf-8"))
+    if format == "docx":
+        return FileResponse(
+            path,
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            filename=f"{_safe_stem(job.filename)}_протокол.docx",
+        )
     media = "application/json" if format == "json" else "text/plain"
     return FileResponse(path, media_type=media,
                         filename=f"{_safe_stem(job.filename)}.{format}")

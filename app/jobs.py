@@ -23,6 +23,7 @@ from .transcribe import transcribe_file
 
 STATUS_QUEUED = "queued"
 STATUS_RUNNING = "running"
+STATUS_ANALYZING = "analyzing"
 STATUS_DONE = "done"
 STATUS_ERROR = "error"
 
@@ -36,6 +37,7 @@ class Job:
     diarize: bool
     initial_prompt: str = ""       # known names/terms to bias spelling
     glossary: str = ""             # "wrong=right" replacement rules
+    analyze: bool = False          # generate AI protocol + Word doc
     status: str = STATUS_QUEUED
     progress: float = 0.0          # 0..1
     created_at: float = field(default_factory=time.time)
@@ -44,6 +46,8 @@ class Job:
     error: Optional[str] = None
     duration: Optional[float] = None
     speakers: Optional[int] = None
+    analysis: Optional[dict] = None        # structured analysis result
+    analysis_error: Optional[str] = None   # error message if analysis failed
 
     def to_public(self) -> dict:
         d = asdict(self)
@@ -86,7 +90,8 @@ class JobStore:
 
     # ---- public API --------------------------------------------------------
     def create(self, filename: str, audio_path: str, language: str, diarize: bool,
-               initial_prompt: str = "", glossary: str = "") -> Job:
+               initial_prompt: str = "", glossary: str = "",
+               analyze: bool = False) -> Job:
         job = Job(
             id=uuid.uuid4().hex[:12],
             filename=filename,
@@ -95,6 +100,7 @@ class JobStore:
             diarize=diarize,
             initial_prompt=initial_prompt,
             glossary=glossary,
+            analyze=analyze,
         )
         with self._lock:
             self._jobs[job.id] = job
@@ -172,12 +178,37 @@ class JobStore:
                     meta["diarization_error"] = str(e)
 
             # Write all output formats to disk.
-            (self.result_path(job.id, "txt")).write_text(
-                formats.to_txt(segments), encoding="utf-8")
+            txt_content = formats.to_txt(segments)
+            (self.result_path(job.id, "txt")).write_text(txt_content, encoding="utf-8")
             (self.result_path(job.id, "srt")).write_text(
                 formats.to_srt(segments), encoding="utf-8")
             (self.result_path(job.id, "json")).write_text(
                 formats.to_json(segments, meta), encoding="utf-8")
+
+            # AI analysis + Word document (optional, requires ANTHROPIC_API_KEY)
+            analysis_result = None
+            analysis_err = None
+            if job.analyze:
+                self._set(job, status=STATUS_ANALYZING, persist=True)
+                try:
+                    from .analyze import analyze_transcript
+                    from .docx_export import generate_report
+
+                    analysis_result = analyze_transcript(txt_content)
+                    segs_dicts = [
+                        {"start": s.start, "end": s.end,
+                         "text": s.text, "speaker": s.speaker}
+                        for s in segments
+                    ]
+                    generate_report(
+                        out_path=self.result_path(job.id, "docx"),
+                        filename=job.filename,
+                        segments=segs_dicts,
+                        analysis=analysis_result,
+                        duration=meta.get("duration"),
+                    )
+                except Exception:
+                    analysis_err = traceback.format_exc(limit=3)
 
             self._set(
                 job,
@@ -186,6 +217,8 @@ class JobStore:
                 finished_at=time.time(),
                 duration=meta.get("duration"),
                 speakers=n_speakers,
+                analysis=analysis_result,
+                analysis_error=analysis_err,
             )
         except Exception:
             self._set(

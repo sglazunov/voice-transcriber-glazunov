@@ -31,5 +31,10 @@ MAX_UPLOAD_MB = int(os.getenv("VTX_MAX_UPLOAD_MB", "2048"))
 DIARIZATION_ENABLED = os.getenv("VTX_DIARIZATION", "0") == "1"
 HF_TOKEN = os.getenv("HF_TOKEN", "")
 
+# AI analysis (protocol/summary generation). Requires Anthropic API key.
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+ANALYSIS_MODEL = os.getenv("VTX_ANALYSIS_MODEL", "claude-sonnet-4-6")
+ANALYSIS_ENABLED = bool(ANTHROPIC_API_KEY)
+
 for _d in (DATA_DIR, UPLOAD_DIR, RESULT_DIR):
     _d.mkdir(parents=True, exist_ok=True)

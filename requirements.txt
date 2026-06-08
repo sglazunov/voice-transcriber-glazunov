@@ -7,6 +7,12 @@ jinja2==3.1.*
 # Transcription engine (CPU, int8) — lightweight, fits 4 GB RAM
 faster-whisper==1.2.*
 
+# Word document generation (protocol export)
+python-docx>=1.1
+
+# AI analysis via Claude API (requires ANTHROPIC_API_KEY env var)
+anthropic>=0.40
+
 # --- Optional: speaker diarization (heavy, needs >4 GB RAM + HF token) ---
 # Install separately only after a RAM upgrade. Kept out of the base install
 # on purpose so the service stays within the laptop's memory budget.
