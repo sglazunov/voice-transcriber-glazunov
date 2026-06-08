@@ -1,7 +1,10 @@
 """Runtime configuration, all overridable via environment variables.
 
-Defaults are tuned for a low-end machine (4 GB RAM, 4 weak CPU cores,
-no GPU) — the Lenovo ideapad acting as the server.
+Defaults are tuned for THIS machine:
+    AMD Ryzen 5 5500U — 6 cores / 12 threads, 14 GB RAM, no CUDA GPU,
+    Windows 11. With this much CPU/RAM we can run the "medium" model with
+    beam search for noticeably better Russian quality than the old low-end
+    "small"/greedy defaults.
 """
 import os
 from pathlib import Path
@@ -12,22 +15,27 @@ UPLOAD_DIR = DATA_DIR / "uploads"
 RESULT_DIR = DATA_DIR / "results"
 JOBS_FILE = DATA_DIR / "jobs.json"
 
-# Whisper model. "small" is the sweet spot for Russian on this hardware.
-# Use "base" if RAM/CPU is too tight, "medium"/"large-v3" only after upgrade.
-MODEL = os.getenv("VTX_MODEL", "small")
-DEVICE = os.getenv("VTX_DEVICE", "cpu")
+# Whisper model. "medium" gives clearly better Russian than "small" and fits
+# comfortably in 14 GB at int8 (~1.5 GB). Drop to "small" if you want it faster,
+# or try "large-v3" if you don't mind it running ~2x slower on this CPU.
+MODEL = os.getenv("VTX_MODEL", "medium")
+DEVICE = os.getenv("VTX_DEVICE", "cpu")          # no CUDA GPU on the 5500U
 COMPUTE_TYPE = os.getenv("VTX_COMPUTE_TYPE", "int8")
-# 0 = let the engine use all available cores (adapts to whatever machine runs it).
-CPU_THREADS = int(os.getenv("VTX_CPU_THREADS", "0"))
-# beam_size=1 (greedy) is much faster on a slow CPU; bump to 5 for quality.
-BEAM_SIZE = int(os.getenv("VTX_BEAM_SIZE", "1"))
+# CTranslate2 scales best with PHYSICAL cores. The 5500U has 6 — using 6 keeps
+# a couple of logical threads free for the web server + OS responsiveness.
+CPU_THREADS = int(os.getenv("VTX_CPU_THREADS", "6"))
+# beam_size=5 for quality — the 6-core CPU has the headroom for it. Set to 1
+# (greedy) if you'd rather have faster, lower-quality transcripts.
+BEAM_SIZE = int(os.getenv("VTX_BEAM_SIZE", "5"))
 DEFAULT_LANGUAGE = os.getenv("VTX_LANGUAGE", "ru")
 VAD_FILTER = os.getenv("VTX_VAD", "1") == "1"
 
 # Max upload size in MB. 2 GB by default so 1 GB videos go through comfortably.
 MAX_UPLOAD_MB = int(os.getenv("VTX_MAX_UPLOAD_MB", "2048"))
 
-# Diarization is opt-in and OFF by default — it does not fit in 4 GB.
+# Diarization ("who spoke") is opt-in and OFF by default. With 14 GB it now
+# fits, but it still needs a one-off `pip install pyannote.audio torch` plus a
+# free HF_TOKEN. Enable with VTX_DIARIZATION=1 once those are in place.
 DIARIZATION_ENABLED = os.getenv("VTX_DIARIZATION", "0") == "1"
 HF_TOKEN = os.getenv("HF_TOKEN", "")
 
@@ -49,12 +57,13 @@ ANALYSIS_MODEL = os.getenv("VTX_ANALYSIS_MODEL", "claude-sonnet-4-6")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_MODEL = os.getenv("VTX_GROQ_MODEL", "llama-3.3-70b-versatile")
 
-# --- Free: Ollama (fully local, no key; needs Ollama running locally) ---
-# Set VTX_OLLAMA=1 after installing Ollama (https://ollama.com) and pulling a
-# model, e.g.  ollama pull llama3.1
+# --- Free: Ollama (fully local, no key; runs on this machine) ---
+# qwen2.5:7b is the pick for this box: strong Russian summarization, ~4.7 GB,
+# fits in 14 GB alongside the Whisper "medium" model. Enabled by default since
+# Ollama is installed locally. Set VTX_OLLAMA=0 to turn it off.
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("VTX_OLLAMA_MODEL", "llama3.1")
-OLLAMA_ENABLED = os.getenv("VTX_OLLAMA", "0") == "1"
+OLLAMA_MODEL = os.getenv("VTX_OLLAMA_MODEL", "qwen2.5:7b")
+OLLAMA_ENABLED = os.getenv("VTX_OLLAMA", "1") == "1"
 
 # Human-friendly labels shown in the UI provider picker.
 PROVIDER_LABELS = {

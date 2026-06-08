@@ -12,22 +12,31 @@ if not exist ".venv\Scripts\activate.bat" (
 
 call ".venv\Scripts\activate.bat"
 
-REM --- настройки (можно менять) ---
-if "%VTX_MODEL%"=="" set VTX_MODEL=small
+REM === Настройки под этот ПК (Ryzen 5 5500U, 12 потоков, 14 ГБ RAM) ===
 set PYTHONUTF8=1
+REM Модель Whisper: medium = заметно лучше русский, чем small (помещается в 14 ГБ)
+if "%VTX_MODEL%"=="" set VTX_MODEL=medium
+REM Качество распознавания (beam search) — у CPU есть запас
+if "%VTX_BEAM_SIZE%"=="" set VTX_BEAM_SIZE=5
+REM Физические ядра (6 у 5500U) — оптимум для движка, остальное оставляем ОС
+if "%VTX_CPU_THREADS%"=="" set VTX_CPU_THREADS=6
 REM Диаризация (кто говорил): 1 чтобы включить (нужен HF_TOKEN и pyannote)
 if "%VTX_DIARIZATION%"=="" set VTX_DIARIZATION=0
-REM === Протокол встречи (ИИ-анализ) — включите хотя бы один движок ===
-REM 1) БЕСПЛАТНО локально: установите Ollama (https://ollama.com),
-REM    выполните "ollama pull llama3.1" и раскомментируйте строку ниже:
-REM set VTX_OLLAMA=1
-REM
-REM 2) БЕСПЛАТНО облако: получите ключ на https://console.groq.com
-REM    и вставьте его ниже:
-if "%GROQ_API_KEY%"=="" set GROQ_API_KEY=
-REM
-REM 3) ПЛАТНО (точнее, по токенам): ключ на https://console.anthropic.com/
-if "%ANTHROPIC_API_KEY%"=="" set ANTHROPIC_API_KEY=
+
+REM === Протокол встречи: локальный ИИ через Ollama (бесплатно, оффлайн) ===
+if "%VTX_OLLAMA%"=="" set VTX_OLLAMA=1
+if "%VTX_OLLAMA_MODEL%"=="" set VTX_OLLAMA_MODEL=qwen2.5:7b
+REM Запускаем сервер Ollama, если он установлен и ещё не поднят
+set "OLLAMA_EXE=%LOCALAPPDATA%\Programs\Ollama\ollama.exe"
+if exist "%OLLAMA_EXE%" (
+  tasklist /FI "IMAGENAME eq ollama.exe" 2>nul | find /I "ollama.exe" >nul || (
+    echo  Запускаю Ollama...
+    start "" /B "%OLLAMA_EXE%" serve
+  )
+)
+REM Альтернативы (если не хотите локально): задайте свой ключ —
+REM   set GROQ_API_KEY=...        (бесплатно, console.groq.com)
+REM   set ANTHROPIC_API_KEY=...   (платно, console.anthropic.com)
 REM --------------------------------
 
 echo.
