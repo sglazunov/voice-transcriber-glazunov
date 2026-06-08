@@ -112,8 +112,22 @@
     </div>
     {% if not analysis_enabled %}
     <div class="api-notice">
-      Режим «Протокол» требует API-ключ Claude.
-      Добавьте в <b>run.bat</b>: <code>set ANTHROPIC_API_KEY=sk-ant-...</code>
+      Режим «Протокол» требует LLM-движок. Включите хотя бы один в <b>run.bat</b>:<br>
+      • Бесплатно локально: установите <code>Ollama</code> и задайте <code>set VTX_OLLAMA=1</code><br>
+      • Бесплатно облако: <code>set GROQ_API_KEY=...</code> (ключ на console.groq.com)<br>
+      • Платно, точнее: <code>set ANTHROPIC_API_KEY=sk-ant-...</code>
+    </div>
+    {% endif %}
+
+    {% if providers %}
+    <div id="providerWrap" class="hidden" style="margin-top:12px">
+      <label class="muted">Движок протокола
+        <select id="provider">
+          {% for p in providers %}
+          <option value="{{ p.id }}">{{ p.label }}</option>
+          {% endfor %}
+        </select>
+      </label>
     </div>
     {% endif %}
 
@@ -195,6 +209,8 @@ function setMode(m){
   curMode=m;
   $('modeTranscribe').classList.toggle('active',m==='transcribe');
   $('modeProtocol').classList.toggle('active',m==='protocol');
+  const pw=$('providerWrap');
+  if(pw)pw.classList.toggle('hidden',m!=='protocol');
 }
 
 /* ---------- helpers ---------- */
@@ -224,6 +240,7 @@ $("go").onclick=()=>{
   fd.append("language",$("language").value);
   fd.append("diarize",$("diarize").checked?"true":"false");
   fd.append("analyze",curMode==='protocol'?"true":"false");
+  fd.append("provider",($("provider")&&$("provider").value)||"auto");
   fd.append("hint",$("hint").value);
   fd.append("glossary",$("glossary").value);
   const xhr=new XMLHttpRequest();
@@ -279,6 +296,9 @@ function renderAnalysis(job){
   if(err){
     html+=`<div class="analysis-err">⚠ Ошибка анализа: ${esc(err.split('\n').pop())}</div>`;
   } else if(a.summary){
+    const provNames={ollama:"Ollama (локально)",groq:"Groq (бесплатно)",anthropic:"Claude (платно)"};
+    const prov=a._provider?provNames[a._provider]||a._provider:"";
+    if(prov)html+=`<div class="muted" style="margin-bottom:8px">🤖 Движок: ${esc(prov)}</div>`;
     html+=`<div class="analysis-section"><h3>О чём шёл разговор</h3><p>${esc(a.summary)}</p></div>`;
 
     if(a.key_thoughts&&a.key_thoughts.length){

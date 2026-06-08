@@ -28,6 +28,10 @@ def index(request: Request):
             "jobs": [j.to_public() for j in store.list()],
             "diarization_enabled": config.DIARIZATION_ENABLED,
             "analysis_enabled": config.ANALYSIS_ENABLED,
+            "providers": [
+                {"id": p, "label": config.PROVIDER_LABELS.get(p, p)}
+                for p in config.available_providers()
+            ],
             "model": config.MODEL,
             "max_upload_mb": config.MAX_UPLOAD_MB,
         },
@@ -41,6 +45,7 @@ async def create_job(
     language: str = Form(config.DEFAULT_LANGUAGE),
     diarize: bool = Form(False),
     analyze: bool = Form(False),
+    provider: str = Form("auto"),
     hint: str = Form(""),
     glossary: str = Form(""),
 ):
@@ -64,7 +69,7 @@ async def create_job(
     want_analyze = analyze and config.ANALYSIS_ENABLED
     job = store.create(file.filename, str(dest), language, want_diar,
                        initial_prompt=hint.strip(), glossary=glossary.strip(),
-                       analyze=want_analyze)
+                       analyze=want_analyze, provider=provider)
     return JSONResponse({"job_id": job.id, **job.to_public()}, status_code=201)
 
 

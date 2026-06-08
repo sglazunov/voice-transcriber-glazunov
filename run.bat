@@ -17,8 +17,16 @@ if "%VTX_MODEL%"=="" set VTX_MODEL=small
 set PYTHONUTF8=1
 REM Диаризация (кто говорил): 1 чтобы включить (нужен HF_TOKEN и pyannote)
 if "%VTX_DIARIZATION%"=="" set VTX_DIARIZATION=0
-REM Протокол встречи (ИИ-анализ): вставьте ваш ключ Anthropic ниже
-REM Получить ключ: https://console.anthropic.com/
+REM === Протокол встречи (ИИ-анализ) — включите хотя бы один движок ===
+REM 1) БЕСПЛАТНО локально: установите Ollama (https://ollama.com),
+REM    выполните "ollama pull llama3.1" и раскомментируйте строку ниже:
+REM set VTX_OLLAMA=1
+REM
+REM 2) БЕСПЛАТНО облако: получите ключ на https://console.groq.com
+REM    и вставьте его ниже:
+if "%GROQ_API_KEY%"=="" set GROQ_API_KEY=
+REM
+REM 3) ПЛАТНО (точнее, по токенам): ключ на https://console.anthropic.com/
 if "%ANTHROPIC_API_KEY%"=="" set ANTHROPIC_API_KEY=
 REM --------------------------------
 

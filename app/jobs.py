@@ -38,6 +38,7 @@ class Job:
     initial_prompt: str = ""       # known names/terms to bias spelling
     glossary: str = ""             # "wrong=right" replacement rules
     analyze: bool = False          # generate AI protocol + Word doc
+    provider: str = "auto"         # LLM provider for the protocol
     status: str = STATUS_QUEUED
     progress: float = 0.0          # 0..1
     created_at: float = field(default_factory=time.time)
@@ -91,7 +92,7 @@ class JobStore:
     # ---- public API --------------------------------------------------------
     def create(self, filename: str, audio_path: str, language: str, diarize: bool,
                initial_prompt: str = "", glossary: str = "",
-               analyze: bool = False) -> Job:
+               analyze: bool = False, provider: str = "auto") -> Job:
         job = Job(
             id=uuid.uuid4().hex[:12],
             filename=filename,
@@ -101,6 +102,7 @@ class JobStore:
             initial_prompt=initial_prompt,
             glossary=glossary,
             analyze=analyze,
+            provider=provider,
         )
         with self._lock:
             self._jobs[job.id] = job
@@ -194,7 +196,7 @@ class JobStore:
                     from .analyze import analyze_transcript
                     from .docx_export import generate_report
 
-                    analysis_result = analyze_transcript(txt_content)
+                    analysis_result = analyze_transcript(txt_content, provider=job.provider)
                     segs_dicts = [
                         {"start": s.start, "end": s.end,
                          "text": s.text, "speaker": s.speaker}
