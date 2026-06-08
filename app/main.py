@@ -7,9 +7,18 @@ from pathlib import Path
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, PlainTextResponse, FileResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel
 
-from . import config
+from . import config, llm
 from .jobs import store, STATUS_DONE, STATUS_ANALYZING
+
+
+def _provider_list() -> list[dict]:
+    """Currently configured/available providers with display labels."""
+    return [
+        {"id": p, "label": config.PROVIDER_LABELS.get(p, p)}
+        for p in config.available_providers()
+    ]
 
 app = FastAPI(title="Voice Transcriber", version="1.0")
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
@@ -27,11 +36,8 @@ def index(request: Request):
             "request": request,
             "jobs": [j.to_public() for j in store.list()],
             "diarization_enabled": config.DIARIZATION_ENABLED,
-            "analysis_enabled": config.ANALYSIS_ENABLED,
-            "providers": [
-                {"id": p, "label": config.PROVIDER_LABELS.get(p, p)}
-                for p in config.available_providers()
-            ],
+            "analysis_enabled": bool(config.available_providers()),
+            "providers": _provider_list(),
             "model": config.MODEL,
             "max_upload_mb": config.MAX_UPLOAD_MB,
         },
@@ -66,7 +72,7 @@ async def create_job(
             out.write(chunk)
 
     want_diar = diarize and config.DIARIZATION_ENABLED
-    want_analyze = analyze and config.ANALYSIS_ENABLED
+    want_analyze = analyze and bool(config.available_providers())
     job = store.create(file.filename, str(dest), language, want_diar,
                        initial_prompt=hint.strip(), glossary=glossary.strip(),
                        analyze=want_analyze, provider=provider)
@@ -76,6 +82,58 @@ async def create_job(
 @app.get("/api/jobs")
 def list_jobs():
     return [j.to_public() for j in store.list()]
+
+
+# ---- LLM providers (protocol engine) --------------------------------------
+class ProviderKey(BaseModel):
+    provider: str
+    api_key: str
+
+
+@app.get("/api/providers")
+def list_providers():
+    """All known providers + which are currently usable (for the UI picker)."""
+    avail = set(config.available_providers())
+    return {
+        "available": config.available_providers(),
+        "providers": [
+            {
+                "id": p,
+                "label": config.PROVIDER_LABELS.get(p, p),
+                "available": p in avail,
+                "needs_key": p in {"anthropic", "groq"},
+            }
+            for p in config.PROVIDER_ORDER
+        ],
+    }
+
+
+@app.post("/api/providers/connect")
+def connect_provider(body: ProviderKey):
+    """Set an API key at runtime and verify it with a tiny live call.
+
+    The key is held in memory only (not persisted to disk). On success the
+    provider becomes selectable in the engine picker immediately.
+    """
+    provider = body.provider.strip().lower()
+    key = body.api_key.strip()
+    if provider not in {"anthropic", "groq"}:
+        raise HTTPException(400, "Ключ поддерживается только для Claude (anthropic) и Groq")
+    if not key:
+        raise HTTPException(400, "Введите ключ")
+
+    # Tentatively set the key, then validate with a cheap non-JSON ping so a
+    # bad key fails fast and is rolled back.
+    previous = config.ANTHROPIC_API_KEY if provider == "anthropic" else config.GROQ_API_KEY
+    config.set_provider_key(provider, key)
+    try:
+        llm.get_provider(provider).complete("Ответь одним словом: ok",
+                                            max_tokens=5, force_json=False)
+    except Exception as e:
+        config.set_provider_key(provider, previous)  # roll back the bad key
+        raise HTTPException(400, f"Не удалось подключиться: {e}")
+
+    return {"ok": True, "connected": provider, "providers": _provider_list()}
 
 
 @app.get("/api/jobs/{job_id}")

@@ -105,31 +105,46 @@
       <button id="modeTranscribe" class="active" onclick="setMode('transcribe')">
         🎙 Только распознавание
       </button>
-      <button id="modeProtocol" onclick="setMode('protocol')"
-        {% if not analysis_enabled %}disabled title="Задайте ANTHROPIC_API_KEY в run.bat"{% endif %}>
+      <button id="modeProtocol" onclick="setMode('protocol')">
         📄 Протокол встречи
       </button>
     </div>
-    {% if not analysis_enabled %}
-    <div class="api-notice">
-      Режим «Протокол» требует LLM-движок. Включите хотя бы один в <b>run.bat</b>:<br>
-      • Бесплатно локально: установите <code>Ollama</code> и задайте <code>set VTX_OLLAMA=1</code><br>
-      • Бесплатно облако: <code>set GROQ_API_KEY=...</code> (ключ на console.groq.com)<br>
-      • Платно, точнее: <code>set ANTHROPIC_API_KEY=sk-ant-...</code>
-    </div>
-    {% endif %}
 
-    {% if providers %}
+    <!-- Protocol engine + paid-API key panel (shown only in protocol mode) -->
     <div id="providerWrap" class="hidden" style="margin-top:12px">
       <label class="muted">Движок протокола
-        <select id="provider">
-          {% for p in providers %}
-          <option value="{{ p.id }}">{{ p.label }}</option>
-          {% endfor %}
-        </select>
+        <select id="provider"></select>
       </label>
+      <div class="muted hidden" id="noEngine" style="margin-top:8px">
+        Нет подключённого движка. Подключите платный API ключом ниже
+        (или включите локальный Ollama в run.bat).
+      </div>
+
+      <details class="adv" id="apiKeyBox" style="margin-top:10px">
+        <summary>🔑 Подключить платный API по ключу</summary>
+        <div class="row" style="margin-top:10px">
+          <label class="muted">Провайдер
+            <select id="apiProvider" onchange="onApiProviderChange()">
+              <option value="anthropic">Claude — платно, по токенам</option>
+              <option value="groq">Groq · Llama — бесплатно</option>
+            </select>
+          </label>
+        </div>
+        <input id="apiKey" type="password" autocomplete="off" spellcheck="false"
+               placeholder="sk-ant-..." style="width:100%;padding:10px;border-radius:10px;
+               border:1px solid var(--line);background:#0b1220;color:var(--txt);margin-top:8px">
+        <div class="row" style="margin-top:8px">
+          <button class="go" id="connectKey" type="button" onclick="connectKey()">Подключить</button>
+          <span class="muted" id="connectMsg"></span>
+        </div>
+        <div class="muted" style="margin-top:8px;font-size:11px;line-height:1.5">
+          Ключ хранится только в памяти сервера и пропадёт после перезапуска.
+          Получить: Claude — <code>console.anthropic.com</code>,
+          Groq — <code>console.groq.com</code>.
+          Для постоянной работы добавьте ключ в <b>run.bat</b>.
+        </div>
+      </details>
     </div>
-    {% endif %}
 
     <div id="drop" style="margin-top:14px">
       <div class="big">📁 Перетащи сюда аудио или видео — или нажми, чтобы выбрать</div>
@@ -211,6 +226,47 @@ function setMode(m){
   $('modeProtocol').classList.toggle('active',m==='protocol');
   const pw=$('providerWrap');
   if(pw)pw.classList.toggle('hidden',m!=='protocol');
+  if(m==='protocol')loadProviders();
+}
+
+/* ---------- LLM providers: engine list + paid-API key connect ---------- */
+const PROV_LABELS={ollama:"Локально · Ollama (бесплатно)",
+                   groq:"Groq · Llama (бесплатно)",
+                   anthropic:"Claude (платно)"};
+async function loadProviders(){
+  let data;
+  try{const r=await fetch("/api/providers");if(!r.ok)return;data=await r.json();}catch{return;}
+  const avail=data.available||[];
+  const sel=$('provider');
+  const prev=sel.value;
+  sel.innerHTML=avail.map(id=>`<option value="${id}">${esc(PROV_LABELS[id]||id)}</option>`).join("");
+  if(avail.includes(prev))sel.value=prev;
+  $('noEngine').classList.toggle('hidden',avail.length>0);
+}
+function onApiProviderChange(){
+  $('apiKey').placeholder=$('apiProvider').value==='anthropic'?"sk-ant-...":"gsk_...";
+}
+async function connectKey(){
+  const provider=$('apiProvider').value;
+  const key=$('apiKey').value.trim();
+  const msg=$('connectMsg');
+  if(!key){msg.textContent="Введите ключ";return;}
+  $('connectKey').disabled=true;msg.textContent="Проверяю ключ…";
+  try{
+    const r=await fetch("/api/providers/connect",{
+      method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({provider,api_key:key})});
+    const d=await r.json();
+    if(r.ok){
+      msg.innerHTML='<span style="color:#22c55e">✓ Подключено</span>';
+      $('apiKey').value="";
+      await loadProviders();
+      $('provider').value=provider;          // auto-select the just-connected engine
+    }else{
+      msg.innerHTML='<span style="color:#f87171">✗ '+esc(d.detail||"Ошибка")+'</span>';
+    }
+  }catch{msg.innerHTML='<span style="color:#f87171">✗ Сбой сети</span>';}
+  $('connectKey').disabled=false;
 }
 
 /* ---------- helpers ---------- */
@@ -428,6 +484,8 @@ async function refresh(){
 
 function openJob(id){viewId=id;startTs=null;updateLive();window.scrollTo({top:0,behavior:"smooth"});}
 
+loadProviders();
+onApiProviderChange();
 refresh();
 setInterval(refresh,1500);
 </script>

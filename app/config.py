@@ -87,6 +87,18 @@ def available_providers() -> list[str]:
     return [p for p in PROVIDER_ORDER if p in out]
 
 
+def set_provider_key(provider: str, key: str) -> None:
+    """Set an API key at runtime (from the UI). Kept in memory only — not
+    written to disk, so it's gone on restart. Add it to run.bat to persist."""
+    global ANTHROPIC_API_KEY, GROQ_API_KEY
+    if provider == "anthropic":
+        ANTHROPIC_API_KEY = key
+    elif provider == "groq":
+        GROQ_API_KEY = key
+    else:
+        raise RuntimeError(f"Ключ для провайдера '{provider}' не поддерживается.")
+
+
 def resolve_provider(name: str | None) -> str:
     """Turn a requested provider (or 'auto'/None) into a concrete one."""
     avail = available_providers()

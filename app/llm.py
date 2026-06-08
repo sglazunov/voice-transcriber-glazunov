@@ -23,8 +23,13 @@ from . import config
 class LLMProvider(Protocol):
     name: str
 
-    def complete(self, prompt: str, max_tokens: int = 2000) -> str:
-        """Send the prompt to the model and return its text response."""
+    def complete(self, prompt: str, max_tokens: int = 2000, force_json: bool = True) -> str:
+        """Send the prompt to the model and return its text response.
+
+        force_json asks the backend to constrain the answer to valid JSON
+        (used for the real analysis). Set False for a plain ping, e.g. when
+        validating an API key.
+        """
         ...
 
 
@@ -52,15 +57,16 @@ class OllamaProvider:
 
     name = "ollama"
 
-    def complete(self, prompt: str, max_tokens: int = 2000) -> str:
+    def complete(self, prompt: str, max_tokens: int = 2000, force_json: bool = True) -> str:
         url = config.OLLAMA_URL.rstrip("/") + "/api/generate"
         payload = {
             "model": config.OLLAMA_MODEL,
             "prompt": prompt,
             "stream": False,
-            "format": "json",  # ask Ollama to constrain output to valid JSON
             "options": {"temperature": 0.2, "num_predict": max_tokens},
         }
+        if force_json:
+            payload["format"] = "json"  # constrain output to valid JSON
         out = _http_post_json(url, payload, headers={}, timeout=600)
         return (out.get("response") or "").strip()
 
@@ -71,15 +77,16 @@ class GroqProvider:
 
     name = "groq"
 
-    def complete(self, prompt: str, max_tokens: int = 2000) -> str:
+    def complete(self, prompt: str, max_tokens: int = 2000, force_json: bool = True) -> str:
         url = "https://api.groq.com/openai/v1/chat/completions"
         payload = {
             "model": config.GROQ_MODEL,
             "messages": [{"role": "user", "content": prompt}],
             "max_tokens": max_tokens,
             "temperature": 0.2,
-            "response_format": {"type": "json_object"},
         }
+        if force_json:
+            payload["response_format"] = {"type": "json_object"}
         headers = {"Authorization": f"Bearer {config.GROQ_API_KEY}"}
         out = _http_post_json(url, payload, headers, timeout=180)
         return out["choices"][0]["message"]["content"].strip()
@@ -91,7 +98,9 @@ class AnthropicProvider:
 
     name = "anthropic"
 
-    def complete(self, prompt: str, max_tokens: int = 2000) -> str:
+    def complete(self, prompt: str, max_tokens: int = 2000, force_json: bool = True) -> str:
+        # Claude follows the "return only JSON" instruction in the prompt well,
+        # so force_json needs no special API flag here.
         try:
             import anthropic
         except ImportError:
