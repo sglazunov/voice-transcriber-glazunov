@@ -73,6 +73,19 @@ def generate_report(
     p = doc.add_paragraph(analysis.get("summary", ""))
     p.paragraph_format.space_after = Pt(12)
 
+    # ---- Подробный разбор по темам -----------------------------------------
+    detailed = analysis.get("detailed", [])
+    if detailed:
+        doc.add_heading("Подробный разбор", level=1)
+        for block in detailed:
+            topic = (block.get("topic") or "").strip()
+            details = (block.get("details") or "").strip()
+            if topic:
+                doc.add_heading(topic, level=2)
+            if details:
+                dp = doc.add_paragraph(details)
+                dp.paragraph_format.space_after = Pt(10)
+
     # ---- Ключевые мысли -----------------------------------------------------
     doc.add_heading("Ключевые мысли", level=1)
     thoughts = analysis.get("key_thoughts", [])
