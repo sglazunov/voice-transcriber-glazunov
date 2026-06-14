@@ -21,6 +21,7 @@ def generate_report(
     segments: list,
     analysis: dict,
     duration: Optional[float] = None,
+    date_str: Optional[str] = None,
 ) -> None:
     """Write a Word document with summary, key thoughts, tasks and full transcript."""
     try:
@@ -60,9 +61,9 @@ def generate_report(
 
     meta_line = doc.add_paragraph()
     meta_line.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    date_str = datetime.datetime.now().strftime("%d.%m.%Y")
+    shown_date = date_str or datetime.datetime.now().strftime("%d.%m.%Y")
     dur_str = f"  ·  Длительность: {_fmt_time(duration)}" if duration else ""
-    meta_run = meta_line.add_run(f"Дата: {date_str}{dur_str}")
+    meta_run = meta_line.add_run(f"Дата: {shown_date}{dur_str}")
     meta_run.font.color.rgb = RGBColor(0x80, 0x80, 0x80)
     meta_run.font.size = Pt(10)
 
@@ -96,15 +97,31 @@ def generate_report(
     else:
         doc.add_paragraph("—").paragraph_format.space_after = Pt(6)
 
+    # ---- Решения / договорённости ------------------------------------------
+    decisions = analysis.get("decisions", [])
+    if decisions:
+        doc.add_heading("Решения и договорённости", level=1)
+        for d in decisions:
+            bp = doc.add_paragraph(style="List Bullet")
+            bp.add_run(d)
+
     # ---- Задачи -------------------------------------------------------------
     tasks = analysis.get("tasks", [])
     doc.add_heading("Задачи", level=1)
     if tasks:
-        for i, task in enumerate(tasks, 1):
+        for task in tasks:
             tp = doc.add_paragraph(style="List Number")
             tp.add_run(f"☐ {task}")  # ☐ checkbox character
     else:
         doc.add_paragraph("Задач не выявлено.").paragraph_format.space_after = Pt(6)
+
+    # ---- Мелкие задачи и доработки -----------------------------------------
+    minor = analysis.get("minor_tasks", [])
+    if minor:
+        doc.add_heading("Мелкие задачи и доработки", level=1)
+        for task in minor:
+            tp = doc.add_paragraph(style="List Bullet")
+            tp.add_run(f"☐ {task}")
 
     # ---- Full transcript on new page ----------------------------------------
     doc.add_page_break()

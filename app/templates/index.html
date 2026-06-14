@@ -375,11 +375,19 @@ function renderAnalysis(job){
       const items=a.key_thoughts.map(t=>`<li>${esc(t)}</li>`).join('');
       html+=`<div class="analysis-section"><h3>Ключевые мысли</h3><ul>${items}</ul></div>`;
     }
+    if(a.decisions&&a.decisions.length){
+      const items=a.decisions.map(t=>`<li>${esc(t)}</li>`).join('');
+      html+=`<div class="analysis-section"><h3>Решения и договорённости</h3><ul>${items}</ul></div>`;
+    }
     if(a.tasks&&a.tasks.length){
       const items=a.tasks.map(t=>`<li>☐ ${esc(t)}</li>`).join('');
       html+=`<div class="analysis-section"><h3>Задачи</h3><ol>${items}</ol></div>`;
     } else {
       html+=`<div class="analysis-section"><h3>Задачи</h3><p class="empty">Задач не выявлено</p></div>`;
+    }
+    if(a.minor_tasks&&a.minor_tasks.length){
+      const items=a.minor_tasks.map(t=>`<li>☐ ${esc(t)}</li>`).join('');
+      html+=`<div class="analysis-section"><h3>Мелкие задачи и доработки</h3><ul>${items}</ul></div>`;
     }
   }
   block.innerHTML=html;
