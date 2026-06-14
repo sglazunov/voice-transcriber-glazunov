@@ -417,7 +417,7 @@ async function updateLive(){
   renderAnalysis(job);
 
   if(job.status==="running"){
-    if(!startTs)startTs=Date.now();startTimer();
+    startTs=job.started_at?job.started_at*1000:(startTs||Date.now());startTimer();
     try{
       const p=await(await fetch(`/api/jobs/${viewId}/partial`)).json();
       const segs=p.segments||[];
@@ -431,7 +431,7 @@ async function updateLive(){
     $("ltools").innerHTML="";
 
   }else if(job.status==="analyzing"){
-    if(!startTs)startTs=Date.now();startTimer();
+    startTs=job.started_at?job.started_at*1000:(startTs||Date.now());startTimer();
     $("live").innerHTML='<div class="empty">Транскрипция завершена, строим протокол…</div>';
     $("ltools").innerHTML="";
 
