@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 
 from . import llm
 
@@ -146,6 +147,9 @@ def analyze_transcript(transcript_text: str, provider: str | None = None) -> dic
                 force_json=False,
             )
             notes_parts.append(f"=== Часть {i} ===\n{note.strip()}")
+            # Free cloud tiers rate-limit easily; pace the chunk calls a bit.
+            if backend.name == "groq" and i < len(chunks):
+                time.sleep(2)
         notes = "\n\n".join(notes_parts)
         raw = backend.complete(_REDUCE_TEMPLATE.format(notes=notes), max_tokens=4000)
 

@@ -159,6 +159,17 @@ def cancel_job(job_id: str):
     return _control(job_id, "cancel")
 
 
+@app.post("/api/jobs/{job_id}/reanalyze")
+def reanalyze_job(job_id: str):
+    try:
+        job = store.reanalyze(job_id)
+    except KeyError:
+        raise HTTPException(404, "Задача не найдена")
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+    return job.to_public()
+
+
 def _control(job_id: str, action: str):
     fn = {"pause": store.pause, "resume": store.resume, "cancel": store.cancel}[action]
     try:

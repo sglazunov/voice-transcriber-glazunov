@@ -355,7 +355,14 @@ function renderAnalysis(job){
 
   let html='';
   if(err){
-    html+=`<div class="analysis-err">⚠ Ошибка анализа: ${esc(err.split('\n').pop())}</div>`;
+    const lines=err.split('\n').map(s=>s.trim()).filter(Boolean);
+    let msg=lines[lines.length-1]||'неизвестная ошибка';
+    if(/429|Too Many Requests/i.test(err))
+      msg='превышен лимит запросов к движку (429). Подождите ~минуту и нажмите «Повторить анализ» — или выберите другой движок (например, локальный Ollama).';
+    else if(/\b403\b|1010/.test(err))
+      msg='движок отклонил запрос (403) — возможна блокировка по региону. Попробуйте VPN или другой движок.';
+    html+=`<div class="analysis-err">⚠ Ошибка анализа: ${esc(msg)}
+      <div style="margin-top:8px"><button class="ghost" onclick="reanalyzeJob()">🔄 Повторить анализ</button></div></div>`;
   } else if(a.summary){
     const provNames={ollama:"Ollama (локально)",groq:"Groq (бесплатно)",anthropic:"Claude (платно)"};
     const prov=a._provider?provNames[a._provider]||a._provider:"";
@@ -504,6 +511,13 @@ async function ctrlJob(action){
 }
 function pauseJob(){ ctrlJob("pause"); }
 function resumeJob(){ ctrlJob("resume"); }
+async function reanalyzeJob(){
+  if(!viewId) return;
+  try{ const r=await fetch(`/api/jobs/${viewId}/reanalyze`,{method:"POST"});
+       if(!r.ok){const d=await r.json().catch(()=>({}));alert(d.detail||"Не удалось запустить анализ");} }
+  catch{}
+  refresh();
+}
 function cancelJob(){
   if(!confirm("Отменить распознавание? Процесс остановится, уже распознанная часть сохранится для скачивания.")) return;
   ctrlJob("cancel");

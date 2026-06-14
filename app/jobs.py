@@ -69,6 +69,8 @@ class JobStore:
         self._partial: Dict[str, list] = {}
         # Per-job control flags (pause/cancel), in-memory only.
         self._control: Dict[str, dict] = {}
+        # Serialises on-demand re-analysis so two LLM runs can't overlap.
+        self._reanalyze_lock = threading.Lock()
         self._last_persist: float = 0.0
         self._lock = threading.Lock()
         self._queue: "queue.Queue[str]" = queue.Queue()
@@ -166,6 +168,47 @@ class JobStore:
         if not job:
             raise KeyError("Задача не найдена")
         return job
+
+    # ---- re-run analysis on an already-transcribed job ---------------------
+    def reanalyze(self, job_id: str) -> Job:
+        """Re-run the LLM protocol on the stored transcript (no re-transcribe)."""
+        job = self._require(job_id)
+        txt_path = self.result_path(job_id, "txt")
+        if not txt_path.exists():
+            raise ValueError("Нет транскрипции для анализа.")
+        if not self._reanalyze_lock.acquire(blocking=False):
+            raise ValueError("Анализ уже выполняется, подождите.")
+        job.analyze = True
+        threading.Thread(target=self._do_reanalyze,
+                         args=(job, txt_path.read_text(encoding="utf-8")),
+                         daemon=True).start()
+        return job
+
+    def _do_reanalyze(self, job: Job, txt: str) -> None:
+        self._set(job, status=STATUS_ANALYZING, analysis_error=None)
+        try:
+            from .analyze import analyze_transcript
+            from .docx_export import generate_report
+
+            result = analyze_transcript(txt, provider=job.provider)
+            segs = []
+            jp = self.result_path(job.id, "json")
+            if jp.exists():
+                try:
+                    segs = json.loads(jp.read_text(encoding="utf-8")).get("segments", [])
+                except Exception:
+                    segs = []
+            generate_report(
+                out_path=self.result_path(job.id, "docx"),
+                filename=job.filename, segments=segs,
+                analysis=result, duration=job.duration,
+            )
+            self._set(job, status=STATUS_DONE, analysis=result, analysis_error=None)
+        except Exception:
+            self._set(job, status=STATUS_DONE,
+                      analysis_error=traceback.format_exc(limit=3))
+        finally:
+            self._reanalyze_lock.release()
 
     # ---- retention / cleanup -----------------------------------------------
     def _purge_old(self) -> None:

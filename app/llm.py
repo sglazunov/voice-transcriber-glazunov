@@ -13,6 +13,8 @@ parsing/validation happens in analyze.py.
 from __future__ import annotations
 
 import json
+import re
+import time
 import urllib.error
 import urllib.request
 from typing import Protocol
@@ -34,29 +36,59 @@ class LLMProvider(Protocol):
 
 
 # ---------------------------------------------------------------------------
-def _http_post_json(url: str, payload: dict, headers: dict, timeout: int = 180) -> dict:
-    """POST a JSON body and return the parsed JSON response."""
+def _retry_after(e: urllib.error.HTTPError, body: str, default: float) -> float:
+    """Seconds to wait before retrying a 429/503, from header or response body."""
+    ra = e.headers.get("Retry-After") if e.headers else None
+    if ra:
+        try:
+            return float(ra)
+        except ValueError:
+            pass
+    # Groq's body says e.g. "Please try again in 12.34s".
+    m = re.search(r"try again in ([\d.]+)\s*s", body or "")
+    if m:
+        try:
+            return float(m.group(1))
+        except ValueError:
+            pass
+    return default
+
+
+def _http_post_json(url: str, payload: dict, headers: dict, timeout: int = 180,
+                    max_retries: int = 3) -> dict:
+    """POST a JSON body and return the parsed JSON response.
+
+    Retries on 429 (rate limit) / 503, honouring Retry-After — free cloud tiers
+    (e.g. Groq) rate-limit easily when a long transcript is analysed in chunks.
+    """
     data = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(url, data=data, method="POST")
-    req.add_header("Content-Type", "application/json")
-    # A browser-like User-Agent: some providers (e.g. Groq) sit behind
-    # Cloudflare, which rejects the default "Python-urllib/x.y" agent with a
-    # 403 / error 1010 ("banned by browser signature").
-    req.add_header("User-Agent",
-                   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                   "AppleWebKit/537.36 (KHTML, like Gecko) "
-                   "Chrome/124.0 Safari/537.36")
-    req.add_header("Accept", "application/json")
-    for k, v in headers.items():
-        req.add_header(k, v)
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
-        body = e.read().decode("utf-8", "replace")[:300]
-        raise RuntimeError(f"HTTP {e.code} от {url}: {body}") from e
-    except urllib.error.URLError as e:
-        raise RuntimeError(f"Не удалось подключиться к {url}: {e.reason}") from e
+    attempt = 0
+    while True:
+        req = urllib.request.Request(url, data=data, method="POST")
+        req.add_header("Content-Type", "application/json")
+        # A browser-like User-Agent: some providers (e.g. Groq) sit behind
+        # Cloudflare, which rejects the default "Python-urllib/x.y" agent with a
+        # 403 / error 1010 ("banned by browser signature").
+        req.add_header("User-Agent",
+                       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                       "AppleWebKit/537.36 (KHTML, like Gecko) "
+                       "Chrome/124.0 Safari/537.36")
+        req.add_header("Accept", "application/json")
+        for k, v in headers.items():
+            req.add_header(k, v)
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            body = e.read().decode("utf-8", "replace")
+            if e.code in (429, 503) and attempt < max_retries:
+                wait = min(_retry_after(e, body, default=8 * (attempt + 1)), 30)
+                time.sleep(wait + 0.5)
+                attempt += 1
+                continue
+            raise RuntimeError(f"HTTP {e.code} от {url}: {body[:300]}") from e
+        except urllib.error.URLError as e:
+            raise RuntimeError(f"Не удалось подключиться к {url}: {e.reason}") from e
 
 
 # ---------------------------------------------------------------------------
