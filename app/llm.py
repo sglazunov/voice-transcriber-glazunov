@@ -39,6 +39,14 @@ def _http_post_json(url: str, payload: dict, headers: dict, timeout: int = 180) 
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(url, data=data, method="POST")
     req.add_header("Content-Type", "application/json")
+    # A browser-like User-Agent: some providers (e.g. Groq) sit behind
+    # Cloudflare, which rejects the default "Python-urllib/x.y" agent with a
+    # 403 / error 1010 ("banned by browser signature").
+    req.add_header("User-Agent",
+                   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                   "AppleWebKit/537.36 (KHTML, like Gecko) "
+                   "Chrome/124.0 Safari/537.36")
+    req.add_header("Accept", "application/json")
     for k, v in headers.items():
         req.add_header(k, v)
     try:
