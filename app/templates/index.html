@@ -221,6 +221,7 @@ const STATUS={queued:"в очереди",running:"распознаётся",anal
 const $=id=>document.getElementById(id);
 let curMode='transcribe';
 let selected=null, activeId=null, viewId=null, startTs=null, elapsedTimer=null;
+let jobInProgress=false;  // true while a job is queued/running/analyzing
 
 /* ---------- mode toggle ---------- */
 function setMode(m){
@@ -476,6 +477,7 @@ async function refresh(){
   try{const r=await fetch("/api/jobs");if(!r.ok)return;jobs=await r.json();}catch{return;}
 
   const active=jobs.find(j=>j.status==="running"||j.status==="analyzing")||jobs.find(j=>j.status==="queued");
+  jobInProgress=!!active;  // guard page reload while work is in progress
   if(active){if(activeId!==active.id){activeId=active.id;startTs=null;}if(!viewId)viewId=active.id;}
 
   $("jobs").innerHTML=jobs.map(j=>{
@@ -505,6 +507,14 @@ async function refresh(){
 }
 
 function openJob(id){viewId=id;startTs=null;updateLive();window.scrollTo({top:0,behavior:"smooth"});}
+
+// Warn before leaving/reloading (F5, Ctrl+F5, mouse reload, tab close) while a
+// job is in progress. NB: browsers show their OWN generic text here — a custom
+// message is not allowed for security reasons. The transcription itself keeps
+// running on the server regardless; this only guards against losing the page.
+window.addEventListener("beforeunload",(e)=>{
+  if(jobInProgress){ e.preventDefault(); e.returnValue=""; return ""; }
+});
 
 loadProviders();
 onApiProviderChange();
