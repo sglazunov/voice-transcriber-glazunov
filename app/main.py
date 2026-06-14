@@ -160,9 +160,9 @@ def cancel_job(job_id: str):
 
 
 @app.post("/api/jobs/{job_id}/reanalyze")
-def reanalyze_job(job_id: str):
+def reanalyze_job(job_id: str, provider: str = "auto"):
     try:
-        job = store.reanalyze(job_id)
+        job = store.reanalyze(job_id, provider=provider)
     except KeyError:
         raise HTTPException(404, "Задача не найдена")
     except ValueError as e:

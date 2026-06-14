@@ -170,14 +170,20 @@ class JobStore:
         return job
 
     # ---- re-run analysis on an already-transcribed job ---------------------
-    def reanalyze(self, job_id: str) -> Job:
-        """Re-run the LLM protocol on the stored transcript (no re-transcribe)."""
+    def reanalyze(self, job_id: str, provider: str | None = None) -> Job:
+        """Re-run the LLM protocol on the stored transcript (no re-transcribe).
+
+        `provider` (optional) switches the engine for this retry, e.g. retry a
+        rate-limited Groq job with local Ollama.
+        """
         job = self._require(job_id)
         txt_path = self.result_path(job_id, "txt")
         if not txt_path.exists():
             raise ValueError("Нет транскрипции для анализа.")
         if not self._reanalyze_lock.acquire(blocking=False):
             raise ValueError("Анализ уже выполняется, подождите.")
+        if provider:
+            job.provider = provider
         job.analyze = True
         threading.Thread(target=self._do_reanalyze,
                          args=(job, txt_path.read_text(encoding="utf-8")),

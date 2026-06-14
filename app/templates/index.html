@@ -513,7 +513,11 @@ function pauseJob(){ ctrlJob("pause"); }
 function resumeJob(){ ctrlJob("resume"); }
 async function reanalyzeJob(){
   if(!viewId) return;
-  try{ const r=await fetch(`/api/jobs/${viewId}/reanalyze`,{method:"POST"});
+  // Use whichever engine is currently selected, so a rate-limited Groq job can
+  // be retried with e.g. local Ollama by just switching the dropdown first.
+  const sel=$("provider");
+  const prov=(sel&&sel.value)?sel.value:"auto";
+  try{ const r=await fetch(`/api/jobs/${viewId}/reanalyze?provider=${encodeURIComponent(prov)}`,{method:"POST"});
        if(!r.ok){const d=await r.json().catch(()=>({}));alert(d.detail||"Не удалось запустить анализ");} }
   catch{}
   refresh();
