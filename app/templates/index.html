@@ -251,6 +251,20 @@ async function loadProviders(){
 function onApiProviderChange(){
   $('apiKey').placeholder=$('apiProvider').value==='anthropic'?"sk-ant-...":"gsk_...";
 }
+/* After a key is connected, resume an analysis that previously failed (e.g. on
+   limits) on the newly available engine — no re-transcription. */
+async function resumeFailedAnalysis(provider){
+  let jobs=[];
+  try{jobs=await(await fetch("/api/jobs")).json();}catch{return false;}
+  const failed=j=>j.analyze&&j.status==="done"&&(j.analysis_error||!j.analysis);
+  let target=jobs.find(j=>j.id===viewId&&failed(j))||jobs.find(failed);
+  if(!target)return false;
+  viewId=target.id;
+  try{await fetch(`/api/jobs/${target.id}/reanalyze?provider=${encodeURIComponent(provider)}`,{method:"POST"});}
+  catch{return false;}
+  refresh();
+  return true;
+}
 async function connectKey(){
   const provider=$('apiProvider').value;
   const key=$('apiKey').value.trim();
@@ -263,10 +277,14 @@ async function connectKey(){
       body:JSON.stringify({provider,api_key:key})});
     const d=await r.json();
     if(r.ok){
-      msg.innerHTML='<span style="color:#22c55e">✓ Подключено</span>';
       $('apiKey').value="";
       await loadProviders();
       $('provider').value=provider;          // auto-select the just-connected engine
+      // If an analysis failed (e.g. limits), resume it now on the new engine.
+      const resumed=await resumeFailedAnalysis(provider);
+      msg.innerHTML=resumed
+        ? '<span style="color:#22c55e">✓ Подключено — продолжаю анализ…</span>'
+        : '<span style="color:#22c55e">✓ Подключено</span>';
     }else{
       msg.innerHTML='<span style="color:#f87171">✗ '+esc(d.detail||"Ошибка")+'</span>';
     }
