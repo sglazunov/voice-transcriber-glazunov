@@ -23,9 +23,15 @@ from .transcribe import transcribe_file
 
 STATUS_QUEUED = "queued"
 STATUS_RUNNING = "running"
+STATUS_PAUSED = "paused"
 STATUS_ANALYZING = "analyzing"
 STATUS_DONE = "done"
 STATUS_ERROR = "error"
+STATUS_CANCELLED = "cancelled"
+
+
+class JobCancelled(Exception):
+    """Raised from the segment callback to abort a running transcription."""
 
 
 @dataclass
@@ -61,12 +67,17 @@ class JobStore:
         self._jobs: Dict[str, Job] = {}
         # Live partial transcript per job (in-memory only), for streaming UI.
         self._partial: Dict[str, list] = {}
+        # Per-job control flags (pause/cancel), in-memory only.
+        self._control: Dict[str, dict] = {}
         self._last_persist: float = 0.0
         self._lock = threading.Lock()
         self._queue: "queue.Queue[str]" = queue.Queue()
         self._load()
+        self._purge_old()
         worker = threading.Thread(target=self._worker_loop, daemon=True, name="vtx-worker")
         worker.start()
+        cleaner = threading.Thread(target=self._cleaner_loop, daemon=True, name="vtx-cleaner")
+        cleaner.start()
 
     # ---- persistence -------------------------------------------------------
     def _load(self) -> None:
@@ -123,6 +134,75 @@ class JobStore:
     def result_path(self, job_id: str, fmt: str) -> Path:
         return config.RESULT_DIR / f"{job_id}.{fmt}"
 
+    # ---- control (pause / resume / cancel) ---------------------------------
+    def pause(self, job_id: str) -> Job:
+        job = self._require(job_id)
+        if job.status not in (STATUS_RUNNING,):
+            raise ValueError("Поставить на паузу можно только идущую задачу.")
+        self._control.setdefault(job_id, {})["pause"] = True
+        return job
+
+    def resume(self, job_id: str) -> Job:
+        job = self._require(job_id)
+        if job.status not in (STATUS_PAUSED, STATUS_RUNNING):
+            raise ValueError("Возобновить можно только приостановленную задачу.")
+        self._control.setdefault(job_id, {})["pause"] = False
+        return job
+
+    def cancel(self, job_id: str) -> Job:
+        job = self._require(job_id)
+        if job.status in (STATUS_DONE, STATUS_ERROR, STATUS_CANCELLED):
+            raise ValueError("Задача уже завершена.")
+        ctrl = self._control.setdefault(job_id, {})
+        ctrl["cancel"] = True
+        ctrl["pause"] = False  # unblock a paused worker so it can see the cancel
+        # A job still in the queue (never started) can be finalised right now.
+        if job.status == STATUS_QUEUED:
+            self._finalise_cancel(job)
+        return job
+
+    def _require(self, job_id: str) -> Job:
+        job = self._jobs.get(job_id)
+        if not job:
+            raise KeyError("Задача не найдена")
+        return job
+
+    # ---- retention / cleanup -----------------------------------------------
+    def _purge_old(self) -> None:
+        """Delete jobs (and their files) older than the retention window."""
+        max_age = config.RESULT_RETENTION_HOURS * 3600
+        now = time.time()
+        removed = False
+        for job in list(self._jobs.values()):
+            ref = job.finished_at or job.created_at or now
+            if now - ref > max_age:
+                self._delete_job_files(job)
+                self._jobs.pop(job.id, None)
+                self._partial.pop(job.id, None)
+                self._control.pop(job.id, None)
+                removed = True
+        if removed:
+            with self._lock:
+                self._save()
+
+    def _delete_job_files(self, job: Job) -> None:
+        for fmt in ("txt", "srt", "json", "docx"):
+            self.result_path(job.id, fmt).unlink(missing_ok=True)
+        try:
+            p = Path(job.audio_path)
+            p.unlink(missing_ok=True)
+            p.with_suffix(".16k.wav").unlink(missing_ok=True)  # diarization temp
+        except Exception:
+            pass
+
+    def _cleaner_loop(self) -> None:
+        while True:
+            time.sleep(1800)  # every 30 min
+            try:
+                self._purge_old()
+            except Exception:
+                pass
+
     # ---- worker ------------------------------------------------------------
     def _set(self, job: Job, persist: bool = True, **kw) -> None:
         with self._lock:
@@ -148,6 +228,8 @@ class JobStore:
     def _process(self, job: Job) -> None:
         self._set(job, status=STATUS_RUNNING, started_at=time.time(), progress=0.0)
         self._partial[job.id] = []
+        ctrl = self._control.setdefault(job.id, {})
+        ctrl.update({"pause": False, "cancel": ctrl.get("cancel", False)})
         try:
             partial = self._partial[job.id]
             rules = glossary.parse(job.glossary)
@@ -156,6 +238,16 @@ class JobStore:
                 self._set(job, persist=False, progress=0.01)
 
             def on_segment(seg, total: float) -> None:
+                # Cooperative pause/cancel — checked between segments.
+                if ctrl.get("cancel"):
+                    raise JobCancelled()
+                if ctrl.get("pause"):
+                    self._set(job, status=STATUS_PAUSED, persist=True)
+                    while ctrl.get("pause") and not ctrl.get("cancel"):
+                        time.sleep(0.3)
+                    if ctrl.get("cancel"):
+                        raise JobCancelled()
+                    self._set(job, status=STATUS_RUNNING, persist=True)
                 # Apply the correction glossary in place so both the live stream
                 # and the final transcript get the fixed spelling.
                 if rules:
@@ -222,6 +314,8 @@ class JobStore:
                 analysis=analysis_result,
                 analysis_error=analysis_err,
             )
+        except JobCancelled:
+            self._finalise_cancel(job)
         except Exception:
             self._set(
                 job,
@@ -229,6 +323,23 @@ class JobStore:
                 error=traceback.format_exc(limit=3),
                 finished_at=time.time(),
             )
+
+    def _finalise_cancel(self, job: Job) -> None:
+        """Mark a job cancelled, keeping whatever was transcribed so far."""
+        partial = self._partial.get(job.id, [])
+        if partial:
+            try:
+                lines = []
+                for s in partial:
+                    sec = int(s.get("start", 0))
+                    ts = f"{sec // 60:02d}:{sec % 60:02d}"
+                    lines.append(f"[{ts}] {s.get('text', '').strip()}")
+                self.result_path(job.id, "txt").write_text(
+                    "\n".join(lines) + "\n", encoding="utf-8")
+            except Exception:
+                pass
+        self._control.pop(job.id, None)
+        self._set(job, status=STATUS_CANCELLED, finished_at=time.time())
 
 
 def _ensure_wav(audio_path: str) -> str:

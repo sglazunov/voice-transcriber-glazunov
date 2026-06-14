@@ -33,6 +33,10 @@ VAD_FILTER = os.getenv("VTX_VAD", "1") == "1"
 # Max upload size in MB. 2 GB by default so 1 GB videos go through comfortably.
 MAX_UPLOAD_MB = int(os.getenv("VTX_MAX_UPLOAD_MB", "2048"))
 
+# How long finished results (and their uploads) are kept before auto-cleanup.
+# Within this window a result stays downloadable even after a page reload.
+RESULT_RETENTION_HOURS = int(os.getenv("VTX_RETENTION_HOURS", "24"))
+
 # Diarization ("who spoke") is opt-in and OFF by default. With 14 GB it now
 # fits, but it still needs a one-off `pip install pyannote.audio torch` plus a
 # free HF_TOKEN. Enable with VTX_DIARIZATION=1 once those are in place.

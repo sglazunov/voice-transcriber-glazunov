@@ -10,7 +10,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 from . import config, llm
-from .jobs import store, STATUS_DONE, STATUS_ANALYZING
+from .jobs import store, STATUS_DONE, STATUS_ANALYZING, STATUS_CANCELLED
 
 
 def _provider_list() -> list[dict]:
@@ -144,6 +144,32 @@ def get_job(job_id: str):
     return job.to_public()
 
 
+@app.post("/api/jobs/{job_id}/pause")
+def pause_job(job_id: str):
+    return _control(job_id, "pause")
+
+
+@app.post("/api/jobs/{job_id}/resume")
+def resume_job(job_id: str):
+    return _control(job_id, "resume")
+
+
+@app.post("/api/jobs/{job_id}/cancel")
+def cancel_job(job_id: str):
+    return _control(job_id, "cancel")
+
+
+def _control(job_id: str, action: str):
+    fn = {"pause": store.pause, "resume": store.resume, "cancel": store.cancel}[action]
+    try:
+        job = fn(job_id)
+    except KeyError:
+        raise HTTPException(404, "Задача не найдена")
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+    return job.to_public()
+
+
 @app.get("/api/jobs/{job_id}/partial")
 def get_partial(job_id: str):
     """Live transcript-so-far for the streaming UI."""
@@ -162,13 +188,16 @@ def get_result(job_id: str, format: str = "txt"):
     job = store.get(job_id)
     if not job:
         raise HTTPException(404, "Задача не найдена")
-    if job.status not in {STATUS_DONE}:
-        raise HTTPException(409, f"Задача ещё не готова (статус: {job.status})")
     if format not in {"txt", "srt", "json", "docx"}:
         raise HTTPException(400, "format должен быть txt | srt | json | docx")
 
+    # Allow download whenever the file exists — covers finished jobs and the
+    # partial transcript saved when a job is cancelled. Still-running jobs
+    # simply have no file yet and fall through to 404 below.
     path = store.result_path(job_id, format)
     if not path.exists():
+        if job.status not in {STATUS_DONE, STATUS_CANCELLED}:
+            raise HTTPException(409, f"Задача ещё не готова (статус: {job.status})")
         raise HTTPException(404, "Результат отсутствует")
     if format == "txt":
         return PlainTextResponse(path.read_text(encoding="utf-8"))
