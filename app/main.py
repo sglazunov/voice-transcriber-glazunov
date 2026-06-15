@@ -88,6 +88,7 @@ def list_jobs():
 class ProviderKey(BaseModel):
     provider: str
     api_key: str
+    extra: str = ""   # YandexGPT: folder id · GigaChat: scope (optional)
 
 
 @app.get("/api/providers")
@@ -101,7 +102,7 @@ def list_providers():
                 "id": p,
                 "label": config.PROVIDER_LABELS.get(p, p),
                 "available": p in avail,
-                "needs_key": p in {"anthropic", "groq"},
+                "needs_key": p in config.KEY_PROVIDERS,
             }
             for p in config.PROVIDER_ORDER
         ],
@@ -117,20 +118,22 @@ def connect_provider(body: ProviderKey):
     """
     provider = body.provider.strip().lower()
     key = body.api_key.strip()
-    if provider not in {"anthropic", "groq"}:
-        raise HTTPException(400, "Ключ поддерживается только для Claude (anthropic) и Groq")
+    extra = body.extra.strip()
+    if provider not in config.KEY_PROVIDERS:
+        raise HTTPException(400, f"Подключение по ключу не поддерживается для '{provider}'")
     if not key:
         raise HTTPException(400, "Введите ключ")
+    if provider == "yandex" and not extra:
+        raise HTTPException(400, "Для YandexGPT укажите folder id (идентификатор каталога)")
 
-    # Tentatively set the key, then validate with a cheap non-JSON ping so a
-    # bad key fails fast and is rolled back.
-    previous = config.ANTHROPIC_API_KEY if provider == "anthropic" else config.GROQ_API_KEY
-    config.set_provider_key(provider, key)
+    # Tentatively set the credentials, then validate with a cheap non-JSON ping
+    # so bad credentials fail fast and are rolled back.
+    config.set_provider_key(provider, key, extra)
     try:
         llm.get_provider(provider).complete("Ответь одним словом: ok",
                                             max_tokens=5, force_json=False)
     except Exception as e:
-        config.set_provider_key(provider, previous)  # roll back the bad key
+        config.set_provider_key(provider, "", "")  # roll back the bad key
         raise HTTPException(400, f"Не удалось подключиться: {e}")
 
     return {"ok": True, "connected": provider, "providers": _provider_list()}

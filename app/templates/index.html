@@ -125,17 +125,23 @@
       </div>
 
       <details class="adv" id="apiKeyBox" style="margin-top:10px">
-        <summary>🔑 Подключить платный API по ключу</summary>
+        <summary>🔑 Подключить API по ключу</summary>
         <div class="row" style="margin-top:10px">
           <label class="muted">Провайдер
             <select id="apiProvider" onchange="onApiProviderChange()">
-              <option value="anthropic">Claude — платно, по токенам</option>
               <option value="groq">Groq · Llama — бесплатно</option>
+              <option value="gemini">Google Gemini — по ключу</option>
+              <option value="yandex">YandexGPT — ключ + folder id</option>
+              <option value="gigachat">GigaChat (Sber) — Authorization key</option>
+              <option value="anthropic">Claude — платно, по токенам</option>
             </select>
           </label>
         </div>
         <input id="apiKey" type="password" autocomplete="off" spellcheck="false"
                placeholder="sk-ant-..." style="width:100%;padding:10px;border-radius:10px;
+               border:1px solid var(--line);background:#0b1220;color:var(--txt);margin-top:8px">
+        <input id="apiExtra" class="hidden" type="text" autocomplete="off" spellcheck="false"
+               placeholder="folder id" style="width:100%;padding:10px;border-radius:10px;
                border:1px solid var(--line);background:#0b1220;color:var(--txt);margin-top:8px">
         <div class="row" style="margin-top:8px">
           <button class="go" id="connectKey" type="button" onclick="connectKey()">Подключить</button>
@@ -143,8 +149,11 @@
         </div>
         <div class="muted" style="margin-top:8px;font-size:11px;line-height:1.5">
           Ключ хранится только в памяти сервера и пропадёт после перезапуска.
-          Получить: Claude — <code>console.anthropic.com</code>,
-          Groq — <code>console.groq.com</code>.
+          Где взять: Groq — <code>console.groq.com</code>,
+          Gemini — <code>aistudio.google.com/apikey</code>,
+          YandexGPT — <code>console.cloud.yandex.ru</code> (нужен API-ключ + folder id),
+          GigaChat — <code>developers.sber.ru/studio</code> (Authorization key),
+          Claude — <code>console.anthropic.com</code>.
           Для постоянной работы добавьте ключ в <b>run.bat</b>.
         </div>
       </details>
@@ -237,6 +246,9 @@ function setMode(m){
 /* ---------- LLM providers: engine list + paid-API key connect ---------- */
 const PROV_LABELS={ollama:"Локально · Ollama (бесплатно)",
                    groq:"Groq · Llama (бесплатно)",
+                   gemini:"Google Gemini",
+                   yandex:"YandexGPT",
+                   gigachat:"GigaChat (Sber)",
                    anthropic:"Claude (платно)"};
 async function loadProviders(){
   let data;
@@ -249,7 +261,14 @@ async function loadProviders(){
   $('noEngine').classList.toggle('hidden',avail.length>0);
 }
 function onApiProviderChange(){
-  $('apiKey').placeholder=$('apiProvider').value==='anthropic'?"sk-ant-...":"gsk_...";
+  const p=$('apiProvider').value;
+  const ph={anthropic:"sk-ant-...",groq:"gsk_...",gemini:"AIza... (Google AI Studio)",
+            yandex:"AQVN... (Api-Key)",gigachat:"Authorization key (base64)"};
+  $('apiKey').placeholder=ph[p]||"ключ";
+  const ex=$('apiExtra');
+  if(p==='yandex'){ex.classList.remove('hidden');ex.placeholder="folder id (идентификатор каталога)";}
+  else if(p==='gigachat'){ex.classList.remove('hidden');ex.placeholder="scope (по умолчанию GIGACHAT_API_PERS)";}
+  else{ex.classList.add('hidden');ex.value="";}
 }
 /* After a key is connected, resume an analysis that previously failed (e.g. on
    limits) on the newly available engine — no re-transcription. */
@@ -268,13 +287,15 @@ async function resumeFailedAnalysis(provider){
 async function connectKey(){
   const provider=$('apiProvider').value;
   const key=$('apiKey').value.trim();
+  const extra=$('apiExtra').value.trim();
   const msg=$('connectMsg');
   if(!key){msg.textContent="Введите ключ";return;}
+  if(provider==='yandex'&&!extra){msg.textContent="Для YandexGPT укажите folder id";return;}
   $('connectKey').disabled=true;msg.textContent="Проверяю ключ…";
   try{
     const r=await fetch("/api/providers/connect",{
       method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({provider,api_key:key})});
+      body:JSON.stringify({provider,api_key:key,extra})});
     const d=await r.json();
     if(r.ok){
       $('apiKey').value="";
@@ -382,7 +403,7 @@ function renderAnalysis(job){
     html+=`<div class="analysis-err">⚠ Ошибка анализа: ${esc(msg)}
       <div style="margin-top:8px"><button class="ghost" onclick="reanalyzeJob()">🔄 Повторить анализ</button></div></div>`;
   } else if(a.summary){
-    const provNames={ollama:"Ollama (локально)",groq:"Groq (бесплатно)",anthropic:"Claude (платно)"};
+    const provNames={ollama:"Ollama (локально)",groq:"Groq (бесплатно)",gemini:"Google Gemini",yandex:"YandexGPT",gigachat:"GigaChat (Sber)",anthropic:"Claude (платно)"};
     const prov=a._provider?provNames[a._provider]||a._provider:"";
     if(prov)html+=`<div class="muted" style="margin-bottom:8px">🤖 Движок: ${esc(prov)}</div>`;
     html+=`<div class="analysis-section"><h3>О чём шёл разговор</h3><p>${esc(a.summary)}</p></div>`;
@@ -402,15 +423,23 @@ function renderAnalysis(job){
       const items=a.key_thoughts.map(t=>`<li>${esc(t)}</li>`).join('');
       html+=`<div class="analysis-section"><h3>Ключевые мысли</h3><ul>${items}</ul></div>`;
     }
+    if(a.conclusions&&a.conclusions.length){
+      const items=a.conclusions.map(t=>`<li>${esc(t)}</li>`).join('');
+      html+=`<div class="analysis-section"><h3>Выводы</h3><ul>${items}</ul></div>`;
+    }
     if(a.decisions&&a.decisions.length){
       const items=a.decisions.map(t=>`<li>${esc(t)}</li>`).join('');
       html+=`<div class="analysis-section"><h3>Решения и договорённости</h3><ul>${items}</ul></div>`;
     }
+    if(a.done_tasks&&a.done_tasks.length){
+      const items=a.done_tasks.map(t=>`<li>☑ ${esc(t)}</li>`).join('');
+      html+=`<div class="analysis-section"><h3>Сделано (выполненные задачи)</h3><ul>${items}</ul></div>`;
+    }
     if(a.tasks&&a.tasks.length){
       const items=a.tasks.map(t=>`<li>☐ ${esc(t)}</li>`).join('');
-      html+=`<div class="analysis-section"><h3>Задачи</h3><ol>${items}</ol></div>`;
+      html+=`<div class="analysis-section"><h3>Задачи (нужно сделать)</h3><ol>${items}</ol></div>`;
     } else {
-      html+=`<div class="analysis-section"><h3>Задачи</h3><p class="empty">Задач не выявлено</p></div>`;
+      html+=`<div class="analysis-section"><h3>Задачи (нужно сделать)</h3><p class="empty">Задач не выявлено</p></div>`;
     }
     if(a.minor_tasks&&a.minor_tasks.length){
       const items=a.minor_tasks.map(t=>`<li>☐ ${esc(t)}</li>`).join('');

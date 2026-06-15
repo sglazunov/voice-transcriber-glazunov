@@ -14,9 +14,11 @@ from __future__ import annotations
 
 import json
 import re
+import ssl
 import time
 import urllib.error
 import urllib.request
+import uuid
 from typing import Protocol
 
 from . import config
@@ -156,9 +158,118 @@ class AnthropicProvider:
         return message.content[0].text.strip()
 
 
+# ---------------------------------------------------------------------------
+class GeminiProvider:
+    """Google Gemini. Free tier, needs GEMINI_API_KEY. May be region-blocked."""
+
+    name = "gemini"
+
+    def complete(self, prompt: str, max_tokens: int = 2000, force_json: bool = True) -> str:
+        model = config.GEMINI_MODEL
+        url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
+               f"{model}:generateContent?key={config.GEMINI_API_KEY}")
+        gen = {"temperature": 0.2, "maxOutputTokens": max_tokens}
+        if force_json:
+            gen["responseMimeType"] = "application/json"
+        payload = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": gen}
+        out = _http_post_json(url, payload, headers={})
+        try:
+            return out["candidates"][0]["content"]["parts"][0]["text"].strip()
+        except (KeyError, IndexError) as e:
+            raise RuntimeError(f"Неожиданный ответ Gemini: {str(out)[:200]}") from e
+
+
+# ---------------------------------------------------------------------------
+class YandexProvider:
+    """YandexGPT (Yandex Cloud Foundation Models). Needs API key + folder id."""
+
+    name = "yandex"
+
+    def complete(self, prompt: str, max_tokens: int = 2000, force_json: bool = True) -> str:
+        url = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
+        payload = {
+            "modelUri": f"gpt://{config.YANDEX_FOLDER_ID}/{config.YANDEX_MODEL}",
+            "completionOptions": {"stream": False, "temperature": 0.2,
+                                  "maxTokens": str(max_tokens)},
+            "messages": [{"role": "user", "text": prompt}],
+        }
+        headers = {"Authorization": f"Api-Key {config.YANDEX_API_KEY}",
+                   "x-folder-id": config.YANDEX_FOLDER_ID}
+        out = _http_post_json(url, payload, headers)
+        try:
+            return out["result"]["alternatives"][0]["message"]["text"].strip()
+        except (KeyError, IndexError) as e:
+            raise RuntimeError(f"Неожиданный ответ YandexGPT: {str(out)[:200]}") from e
+
+
+# ---------------------------------------------------------------------------
+class GigaChatProvider:
+    """GigaChat (Sber). OAuth: an Authorization key is exchanged for a short-
+    lived access token, then chat completions are called.
+
+    Sber serves its endpoints behind the Russian Trusted Root CA, which Python
+    doesn't ship. To keep setup zero-config we skip TLS verification for Sber's
+    own hosts only. To verify properly instead, install the Russian CA bundle
+    and remove the unverified context below.
+    """
+
+    name = "gigachat"
+    _token: str = ""
+    _exp: float = 0.0
+    _ctx = ssl.create_default_context()
+    _ctx.check_hostname = False
+    _ctx.verify_mode = ssl.CERT_NONE
+
+    def _get_token(self) -> str:
+        if self._token and time.time() < self._exp - 30:
+            return self._token
+        url = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
+        body = f"scope={config.GIGACHAT_SCOPE}".encode("utf-8")
+        req = urllib.request.Request(url, data=body, method="POST")
+        req.add_header("Content-Type", "application/x-www-form-urlencoded")
+        req.add_header("Accept", "application/json")
+        req.add_header("RqUID", str(uuid.uuid4()))
+        req.add_header("Authorization", f"Basic {config.GIGACHAT_AUTH_KEY}")
+        try:
+            with urllib.request.urlopen(req, timeout=30, context=self._ctx) as resp:
+                d = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            body = e.read().decode("utf-8", "replace")[:300]
+            raise RuntimeError(f"GigaChat OAuth HTTP {e.code}: {body}") from e
+        self._token = d["access_token"]
+        # expires_at is epoch milliseconds; fall back to ~25 min.
+        self._exp = (d.get("expires_at", 0) / 1000) or (time.time() + 1500)
+        return self._token
+
+    def complete(self, prompt: str, max_tokens: int = 2000, force_json: bool = True) -> str:
+        token = self._get_token()
+        url = "https://gigachat.devices.sberbank.ru/api/v1/chat/completions"
+        payload = {
+            "model": config.GIGACHAT_MODEL,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.2,
+            "max_tokens": max_tokens,
+        }
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url, data=data, method="POST")
+        req.add_header("Content-Type", "application/json")
+        req.add_header("Accept", "application/json")
+        req.add_header("Authorization", f"Bearer {token}")
+        try:
+            with urllib.request.urlopen(req, timeout=180, context=self._ctx) as resp:
+                out = json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            body = e.read().decode("utf-8", "replace")[:300]
+            raise RuntimeError(f"GigaChat HTTP {e.code}: {body}") from e
+        return out["choices"][0]["message"]["content"].strip()
+
+
 _PROVIDERS = {
     "ollama": OllamaProvider,
     "groq": GroqProvider,
+    "gemini": GeminiProvider,
+    "yandex": YandexProvider,
+    "gigachat": GigaChatProvider,
     "anthropic": AnthropicProvider,
 }
 

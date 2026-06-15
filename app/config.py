@@ -61,6 +61,20 @@ ANALYSIS_MODEL = os.getenv("VTX_ANALYSIS_MODEL", "claude-sonnet-4-6")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_MODEL = os.getenv("VTX_GROQ_MODEL", "llama-3.3-70b-versatile")
 
+# --- Google Gemini (free tier; key at https://aistudio.google.com/apikey) ---
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_MODEL = os.getenv("VTX_GEMINI_MODEL", "gemini-2.0-flash")
+
+# --- YandexGPT (Yandex Cloud: API key + folder id) ---
+YANDEX_API_KEY = os.getenv("YANDEX_API_KEY", "")
+YANDEX_FOLDER_ID = os.getenv("YANDEX_FOLDER_ID", "")
+YANDEX_MODEL = os.getenv("VTX_YANDEX_MODEL", "yandexgpt/latest")
+
+# --- GigaChat / Sber (Authorization key = base64 client_id:secret) ---
+GIGACHAT_AUTH_KEY = os.getenv("GIGACHAT_AUTH_KEY", "")
+GIGACHAT_SCOPE = os.getenv("GIGACHAT_SCOPE", "GIGACHAT_API_PERS")
+GIGACHAT_MODEL = os.getenv("VTX_GIGACHAT_MODEL", "GigaChat")
+
 # --- Free: Ollama (fully local, no key; runs on this machine) ---
 # qwen2.5:7b is the pick for this box: strong Russian summarization, ~4.7 GB,
 # fits in 14 GB alongside the Whisper "medium" model. Enabled by default since
@@ -73,10 +87,16 @@ OLLAMA_ENABLED = os.getenv("VTX_OLLAMA", "1") == "1"
 PROVIDER_LABELS = {
     "ollama": "Локально · Ollama (бесплатно, оффлайн)",
     "groq": "Groq · Llama (бесплатно, облако)",
+    "gemini": "Google Gemini (по ключу)",
+    "yandex": "YandexGPT (ключ + folder id)",
+    "gigachat": "GigaChat / Sber (по ключу)",
     "anthropic": "Claude (платно по токенам, точнее)",
 }
-# Order = preference for "auto" (free first, paid last).
-PROVIDER_ORDER = ["ollama", "groq", "anthropic"]
+# Order = preference for "auto" (free/local first, paid last).
+PROVIDER_ORDER = ["ollama", "groq", "gemini", "yandex", "gigachat", "anthropic"]
+
+# Providers configurable from the UI by an API key (+ optional extra field).
+KEY_PROVIDERS = {"anthropic", "groq", "gemini", "yandex", "gigachat"}
 
 
 def available_providers() -> list[str]:
@@ -86,19 +106,39 @@ def available_providers() -> list[str]:
         out.append("ollama")
     if GROQ_API_KEY:
         out.append("groq")
+    if GEMINI_API_KEY:
+        out.append("gemini")
+    if YANDEX_API_KEY and YANDEX_FOLDER_ID:
+        out.append("yandex")
+    if GIGACHAT_AUTH_KEY:
+        out.append("gigachat")
     if ANTHROPIC_API_KEY:
         out.append("anthropic")
     return [p for p in PROVIDER_ORDER if p in out]
 
 
-def set_provider_key(provider: str, key: str) -> None:
+def set_provider_key(provider: str, key: str, extra: str = "") -> None:
     """Set an API key at runtime (from the UI). Kept in memory only — not
-    written to disk, so it's gone on restart. Add it to run.bat to persist."""
-    global ANTHROPIC_API_KEY, GROQ_API_KEY
+    written to disk, so it's gone on restart. Add it to run.bat to persist.
+
+    `extra` carries the provider's second credential where needed:
+    YandexGPT → folder id; GigaChat → scope (optional)."""
+    global ANTHROPIC_API_KEY, GROQ_API_KEY, GEMINI_API_KEY
+    global YANDEX_API_KEY, YANDEX_FOLDER_ID, GIGACHAT_AUTH_KEY, GIGACHAT_SCOPE
     if provider == "anthropic":
         ANTHROPIC_API_KEY = key
     elif provider == "groq":
         GROQ_API_KEY = key
+    elif provider == "gemini":
+        GEMINI_API_KEY = key
+    elif provider == "yandex":
+        YANDEX_API_KEY = key
+        if extra:
+            YANDEX_FOLDER_ID = extra
+    elif provider == "gigachat":
+        GIGACHAT_AUTH_KEY = key
+        if extra:
+            GIGACHAT_SCOPE = extra
     else:
         raise RuntimeError(f"Ключ для провайдера '{provider}' не поддерживается.")
 

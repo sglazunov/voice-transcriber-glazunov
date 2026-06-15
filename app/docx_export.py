@@ -97,6 +97,14 @@ def generate_report(
     else:
         doc.add_paragraph("—").paragraph_format.space_after = Pt(6)
 
+    # ---- Выводы -------------------------------------------------------------
+    conclusions = analysis.get("conclusions", [])
+    if conclusions:
+        doc.add_heading("Выводы", level=1)
+        for c in conclusions:
+            bp = doc.add_paragraph(style="List Bullet")
+            bp.add_run(c)
+
     # ---- Решения / договорённости ------------------------------------------
     decisions = analysis.get("decisions", [])
     if decisions:
@@ -105,13 +113,21 @@ def generate_report(
             bp = doc.add_paragraph(style="List Bullet")
             bp.add_run(d)
 
-    # ---- Задачи -------------------------------------------------------------
+    # ---- Сделано (выполненные задачи) --------------------------------------
+    done_tasks = analysis.get("done_tasks", [])
+    if done_tasks:
+        doc.add_heading("Сделано (выполненные задачи)", level=1)
+        for task in done_tasks:
+            tp = doc.add_paragraph(style="List Bullet")
+            tp.add_run(f"☑ {task}")  # ☑ checked box
+
+    # ---- Задачи (нужно сделать) --------------------------------------------
     tasks = analysis.get("tasks", [])
-    doc.add_heading("Задачи", level=1)
+    doc.add_heading("Задачи (нужно сделать)", level=1)
     if tasks:
         for task in tasks:
             tp = doc.add_paragraph(style="List Number")
-            tp.add_run(f"☐ {task}")  # ☐ checkbox character
+            tp.add_run(f"☐ {task}")  # ☐ empty checkbox
     else:
         doc.add_paragraph("Задач не выявлено.").paragraph_format.space_after = Pt(6)
 
