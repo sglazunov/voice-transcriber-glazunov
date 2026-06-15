@@ -138,19 +138,31 @@ def _split_chunks(text: str) -> list[str]:
     return chunks
 
 
-def analyze_transcript(transcript_text: str, provider: str | None = None) -> dict:
+def _with_extra(prompt: str, extra: str) -> str:
+    """Append the user's custom instructions to a prompt, if any."""
+    extra = (extra or "").strip()
+    if not extra:
+        return prompt
+    return (prompt + "\n\nДОПОЛНИТЕЛЬНЫЕ ТРЕБОВАНИЯ ПОЛЬЗОВАТЕЛЯ (обязательно учти "
+            "их, но сохрани формат JSON и все поля):\n" + extra)
+
+
+def analyze_transcript(transcript_text: str, provider: str | None = None,
+                       extra_instructions: str = "") -> dict:
     """Send the transcript to the chosen LLM provider and return structured analysis.
 
-    `provider` is one of "ollama" | "groq" | "anthropic" | "auto" | None.
-    Returns a dict with keys: summary, detailed, key_thoughts, decisions, tasks,
-    minor_tasks, _provider. Raises RuntimeError if no provider is configured or
-    the call fails.
+    `provider` is one of "ollama" | "groq" | "gemini" | "yandex" | "gigachat" |
+    "anthropic" | "auto" | None. `extra_instructions` is optional free-form text
+    from the user that steers the analysis (the JSON shape stays fixed).
+    Returns a dict with keys: summary, detailed, key_thoughts, conclusions,
+    decisions, done_tasks, tasks, minor_tasks, _provider.
     """
     backend = llm.get_provider(provider)
     text = (transcript_text or "").strip()
 
     if len(text) <= _MAX_CHARS:
-        raw = backend.complete(_PROMPT_TEMPLATE.format(transcript=text), max_tokens=6000)
+        prompt = _with_extra(_PROMPT_TEMPLATE.format(transcript=text), extra_instructions)
+        raw = backend.complete(prompt, max_tokens=6000)
     else:
         chunks = _split_chunks(text)
         notes_parts = []
@@ -165,7 +177,8 @@ def analyze_transcript(transcript_text: str, provider: str | None = None) -> dic
             if backend.name == "groq" and i < len(chunks):
                 time.sleep(2)
         notes = "\n\n".join(notes_parts)
-        raw = backend.complete(_REDUCE_TEMPLATE.format(notes=notes), max_tokens=6000)
+        prompt = _with_extra(_REDUCE_TEMPLATE.format(notes=notes), extra_instructions)
+        raw = backend.complete(prompt, max_tokens=6000)
 
     result = _extract_json(raw)
 

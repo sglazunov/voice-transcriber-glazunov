@@ -157,6 +157,12 @@
           Для постоянной работы добавьте ключ в <b>run.bat</b>.
         </div>
       </details>
+
+      <details class="adv" style="margin-top:10px">
+        <summary>✏️ Инструкция для ИИ (промпт, необязательно)</summary>
+        <label class="muted" style="margin-top:8px;display:block">Свои требования к разбору — добавятся к запросу. Структура документа (разбор/выводы/задачи) остаётся прежней.</label>
+        <textarea id="instructions" rows="3" placeholder="Напр.: выдели риски и блокеры; задачи опиши максимально подробно; добавь раздел «следующие шаги»; пиши деловым языком"></textarea>
+      </details>
     </div>
 
     <div id="drop" style="margin-top:14px">
@@ -345,6 +351,7 @@ $("go").onclick=()=>{
   fd.append("provider",($("provider")&&$("provider").value)||"auto");
   fd.append("hint",$("hint").value);
   fd.append("glossary",$("glossary").value);
+  fd.append("instructions",($("instructions")&&$("instructions").value)||"");
   const xhr=new XMLHttpRequest();
   xhr.open("POST","/api/jobs");
   $("upwrap").classList.remove("hidden");$("go").disabled=true;
@@ -583,7 +590,9 @@ async function reanalyzeJob(){
   // be retried with e.g. local Ollama by just switching the dropdown first.
   const sel=$("provider");
   const prov=(sel&&sel.value)?sel.value:"auto";
-  try{ const r=await fetch(`/api/jobs/${viewId}/reanalyze?provider=${encodeURIComponent(prov)}`,{method:"POST"});
+  const instr=($("instructions")&&$("instructions").value)||"";
+  const url=`/api/jobs/${viewId}/reanalyze?provider=${encodeURIComponent(prov)}&instructions=${encodeURIComponent(instr)}`;
+  try{ const r=await fetch(url,{method:"POST"});
        if(!r.ok){const d=await r.json().catch(()=>({}));alert(d.detail||"Не удалось запустить анализ");} }
   catch{}
   refresh();

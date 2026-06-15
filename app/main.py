@@ -54,6 +54,7 @@ async def create_job(
     provider: str = Form("auto"),
     hint: str = Form(""),
     glossary: str = Form(""),
+    instructions: str = Form(""),
 ):
     ext = Path(file.filename or "").suffix.lower()
     if ext not in ALLOWED_EXT:
@@ -75,7 +76,8 @@ async def create_job(
     want_analyze = analyze and bool(config.available_providers())
     job = store.create(file.filename, str(dest), language, want_diar,
                        initial_prompt=hint.strip(), glossary=glossary.strip(),
-                       analyze=want_analyze, provider=provider)
+                       analyze=want_analyze, provider=provider,
+                       analysis_instructions=instructions.strip())
     return JSONResponse({"job_id": job.id, **job.to_public()}, status_code=201)
 
 
@@ -163,9 +165,9 @@ def cancel_job(job_id: str):
 
 
 @app.post("/api/jobs/{job_id}/reanalyze")
-def reanalyze_job(job_id: str, provider: str = "auto"):
+def reanalyze_job(job_id: str, provider: str = "auto", instructions: str | None = None):
     try:
-        job = store.reanalyze(job_id, provider=provider)
+        job = store.reanalyze(job_id, provider=provider, instructions=instructions)
     except KeyError:
         raise HTTPException(404, "Задача не найдена")
     except ValueError as e:

@@ -45,6 +45,7 @@ class Job:
     glossary: str = ""             # "wrong=right" replacement rules
     analyze: bool = False          # generate AI protocol + Word doc
     provider: str = "auto"         # LLM provider for the protocol
+    analysis_instructions: str = ""  # user's custom prompt additions
     status: str = STATUS_QUEUED
     progress: float = 0.0          # 0..1
     created_at: float = field(default_factory=time.time)
@@ -106,7 +107,8 @@ class JobStore:
     # ---- public API --------------------------------------------------------
     def create(self, filename: str, audio_path: str, language: str, diarize: bool,
                initial_prompt: str = "", glossary: str = "",
-               analyze: bool = False, provider: str = "auto") -> Job:
+               analyze: bool = False, provider: str = "auto",
+               analysis_instructions: str = "") -> Job:
         job = Job(
             id=uuid.uuid4().hex[:12],
             filename=filename,
@@ -117,6 +119,7 @@ class JobStore:
             glossary=glossary,
             analyze=analyze,
             provider=provider,
+            analysis_instructions=analysis_instructions,
         )
         with self._lock:
             self._jobs[job.id] = job
@@ -175,11 +178,13 @@ class JobStore:
         return job
 
     # ---- re-run analysis on an already-transcribed job ---------------------
-    def reanalyze(self, job_id: str, provider: str | None = None) -> Job:
+    def reanalyze(self, job_id: str, provider: str | None = None,
+                  instructions: str | None = None) -> Job:
         """Re-run the LLM protocol on the stored transcript (no re-transcribe).
 
         `provider` (optional) switches the engine for this retry, e.g. retry a
-        rate-limited Groq job with local Ollama.
+        rate-limited Groq job with local Ollama. `instructions` (optional)
+        replaces the custom prompt additions for this run.
         """
         job = self._require(job_id)
         txt_path = self.result_path(job_id, "txt")
@@ -189,6 +194,8 @@ class JobStore:
             raise ValueError("Анализ уже выполняется, подождите.")
         if provider:
             job.provider = provider
+        if instructions is not None:
+            job.analysis_instructions = instructions
         job.analyze = True
         threading.Thread(target=self._do_reanalyze,
                          args=(job, txt_path.read_text(encoding="utf-8")),
@@ -201,7 +208,8 @@ class JobStore:
             from .analyze import analyze_transcript
             from .docx_export import generate_report
 
-            result = analyze_transcript(txt, provider=job.provider)
+            result = analyze_transcript(txt, provider=job.provider,
+                                        extra_instructions=job.analysis_instructions)
             prov = result.get("_provider") or job.provider
             segs = []
             jp = self.result_path(job.id, "json")
@@ -348,7 +356,9 @@ class JobStore:
                     from .analyze import analyze_transcript
                     from .docx_export import generate_report
 
-                    analysis_result = analyze_transcript(txt_content, provider=job.provider)
+                    analysis_result = analyze_transcript(
+                        txt_content, provider=job.provider,
+                        extra_instructions=job.analysis_instructions)
                     prov = analysis_result.get("_provider") or job.provider
                     segs_dicts = [
                         {"start": s.start, "end": s.end,
