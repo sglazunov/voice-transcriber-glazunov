@@ -518,6 +518,11 @@ async function updateLive(){
                       padding:7px 14px;border-radius:8px;text-decoration:none;font-weight:600;
                       font-size:13px;">📄 Скачать Word</a>`;
     }
+    if(job.analyze){
+      tools+=`<button class="ghost" onclick="reanalyzeJob()"
+               title="Сменить «Движок протокола» в списке выше и нажать — протокол пересоберётся без повторного распознавания"
+               >🔄 Перегенерировать протокол</button>`;
+    }
     $("ltools").innerHTML=tools;
 
   }else if(job.status==="cancelled"){
