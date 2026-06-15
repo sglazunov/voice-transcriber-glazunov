@@ -198,12 +198,27 @@ def get_partial(job_id: str):
 
 
 @app.get("/api/jobs/{job_id}/result")
-def get_result(job_id: str, format: str = "txt"):
+def get_result(job_id: str, format: str = "txt", provider: str = ""):
     job = store.get(job_id)
     if not job:
         raise HTTPException(404, "Задача не найдена")
     if format not in {"txt", "srt", "json", "docx"}:
         raise HTTPException(400, "format должен быть txt | srt | json | docx")
+
+    # Word protocol: one document per engine. Pick the requested provider, or
+    # default to the most recently generated one.
+    if format == "docx":
+        prov = provider or (job.docx_providers[-1] if job.docx_providers else "")
+        if not prov:
+            raise HTTPException(404, "Протокол ещё не сгенерирован")
+        path = store.docx_path(job_id, prov)
+        if not path.exists():
+            raise HTTPException(404, "Протокол для этого движка отсутствует")
+        return FileResponse(
+            path,
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            filename=f"{_safe_stem(job.filename)}_{prov}_протокол.docx",
+        )
 
     # Allow download whenever the file exists — covers finished jobs and the
     # partial transcript saved when a job is cancelled. Still-running jobs
@@ -215,12 +230,6 @@ def get_result(job_id: str, format: str = "txt"):
         raise HTTPException(404, "Результат отсутствует")
     if format == "txt":
         return PlainTextResponse(path.read_text(encoding="utf-8"))
-    if format == "docx":
-        return FileResponse(
-            path,
-            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            filename=f"{_safe_stem(job.filename)}_протокол.docx",
-        )
     media = "application/json" if format == "json" else "text/plain"
     return FileResponse(path, media_type=media,
                         filename=f"{_safe_stem(job.filename)}.{format}")

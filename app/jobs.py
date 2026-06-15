@@ -53,8 +53,9 @@ class Job:
     error: Optional[str] = None
     duration: Optional[float] = None
     speakers: Optional[int] = None
-    analysis: Optional[dict] = None        # structured analysis result
+    analysis: Optional[dict] = None        # structured analysis result (latest)
     analysis_error: Optional[str] = None   # error message if analysis failed
+    docx_providers: list = field(default_factory=list)  # engines a Word doc exists for
 
     def to_public(self) -> dict:
         d = asdict(self)
@@ -136,6 +137,10 @@ class JobStore:
     def result_path(self, job_id: str, fmt: str) -> Path:
         return config.RESULT_DIR / f"{job_id}.{fmt}"
 
+    def docx_path(self, job_id: str, provider: str) -> Path:
+        """Per-engine Word document, so docs from different engines coexist."""
+        return config.RESULT_DIR / f"{job_id}__{provider}.docx"
+
     # ---- control (pause / resume / cancel) ---------------------------------
     def pause(self, job_id: str) -> Job:
         job = self._require(job_id)
@@ -197,6 +202,7 @@ class JobStore:
             from .docx_export import generate_report
 
             result = analyze_transcript(txt, provider=job.provider)
+            prov = result.get("_provider") or job.provider
             segs = []
             jp = self.result_path(job.id, "json")
             if jp.exists():
@@ -205,11 +211,14 @@ class JobStore:
                 except Exception:
                     segs = []
             generate_report(
-                out_path=self.result_path(job.id, "docx"),
+                out_path=self.docx_path(job.id, prov),
                 filename=job.filename, segments=segs,
                 analysis=result, duration=job.duration,
             )
-            self._set(job, status=STATUS_DONE, analysis=result, analysis_error=None)
+            if prov not in job.docx_providers:
+                job.docx_providers.append(prov)
+            self._set(job, status=STATUS_DONE, analysis=result,
+                      analysis_error=None, docx_providers=job.docx_providers)
         except Exception:
             self._set(job, status=STATUS_DONE,
                       analysis_error=traceback.format_exc(limit=3))
@@ -237,6 +246,8 @@ class JobStore:
     def _delete_job_files(self, job: Job) -> None:
         for fmt in ("txt", "srt", "json", "docx"):
             self.result_path(job.id, fmt).unlink(missing_ok=True)
+        for p in config.RESULT_DIR.glob(f"{job.id}__*.docx"):  # per-engine docs
+            p.unlink(missing_ok=True)
         try:
             p = Path(job.audio_path)
             p.unlink(missing_ok=True)
@@ -338,18 +349,21 @@ class JobStore:
                     from .docx_export import generate_report
 
                     analysis_result = analyze_transcript(txt_content, provider=job.provider)
+                    prov = analysis_result.get("_provider") or job.provider
                     segs_dicts = [
                         {"start": s.start, "end": s.end,
                          "text": s.text, "speaker": s.speaker}
                         for s in segments
                     ]
                     generate_report(
-                        out_path=self.result_path(job.id, "docx"),
+                        out_path=self.docx_path(job.id, prov),
                         filename=job.filename,
                         segments=segs_dicts,
                         analysis=analysis_result,
                         duration=meta.get("duration"),
                     )
+                    if prov not in job.docx_providers:
+                        job.docx_providers.append(prov)
                 except Exception:
                     analysis_err = traceback.format_exc(limit=3)
 

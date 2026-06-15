@@ -250,6 +250,8 @@ const PROV_LABELS={ollama:"Локально · Ollama (бесплатно)",
                    yandex:"YandexGPT",
                    gigachat:"GigaChat (Sber)",
                    anthropic:"Claude (платно)"};
+const PROV_SHORT={ollama:"Ollama",groq:"Groq",gemini:"Gemini",
+                  yandex:"YandexGPT",gigachat:"GigaChat",anthropic:"Claude"};
 async function loadProviders(){
   let data;
   try{const r=await fetch("/api/providers");if(!r.ok)return;data=await r.json();}catch{return;}
@@ -523,16 +525,17 @@ async function updateLive(){
       <a class="dl" href="/api/jobs/${viewId}/result?format=txt" target="_blank">TXT</a>
       <a class="dl" href="/api/jobs/${viewId}/result?format=srt">SRT</a>
       <a class="dl" href="/api/jobs/${viewId}/result?format=json">JSON</a>`;
-    if(job.analyze&&job.analysis&&!job.analysis_error){
-      tools+=`<a class="dl" href="/api/jobs/${viewId}/result?format=docx"
+    // One Word button per engine that produced a document (compare engines).
+    (job.docx_providers||[]).forEach(p=>{
+      tools+=`<a class="dl" href="/api/jobs/${viewId}/result?format=docx&provider=${encodeURIComponent(p)}"
                style="background:linear-gradient(90deg,#0ea5e9,#6366f1);color:#fff;
                       padding:7px 14px;border-radius:8px;text-decoration:none;font-weight:600;
-                      font-size:13px;">📄 Скачать Word</a>`;
-    }
+                      font-size:13px;">📄 Word · ${esc(PROV_SHORT[p]||p)}</a>`;
+    });
     if(job.analyze){
       tools+=`<button class="ghost" onclick="reanalyzeJob()"
-               title="Сменить «Движок протокола» в списке выше и нажать — протокол пересоберётся без повторного распознавания"
-               >🔄 Перегенерировать протокол</button>`;
+               title="Сменить «Движок протокола» в списке выше и нажать — протокол пересоберётся другим движком и сохранится отдельно"
+               >🔄 Перегенерировать (выбранным движком)</button>`;
     }
     $("ltools").innerHTML=tools;
 
