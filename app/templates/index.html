@@ -376,6 +376,12 @@ function renderSegments(el,segs){
 }
 
 /* ---------- analysis block ---------- */
+function taskParts(t){
+  if(t&&typeof t==='object')return{text:String(t.task||''),owner:String(t.owner||'')};
+  return{text:String(t||''),owner:''};
+}
+function taskHtml(t){const p=taskParts(t);
+  return esc(p.text)+(p.owner?` — <i style="color:var(--muted)">${esc(p.owner)}</i>`:'');}
 function renderAnalysis(job){
   const block=$('analysisBlock');
   if(!job.analyze){block.classList.add('hidden');return;}
@@ -432,17 +438,22 @@ function renderAnalysis(job){
       html+=`<div class="analysis-section"><h3>Решения и договорённости</h3><ul>${items}</ul></div>`;
     }
     if(a.done_tasks&&a.done_tasks.length){
-      const items=a.done_tasks.map(t=>`<li>☑ ${esc(t)}</li>`).join('');
+      const items=a.done_tasks.map(t=>`<li>☑ ${taskHtml(t)}</li>`).join('');
       html+=`<div class="analysis-section"><h3>Сделано (выполненные задачи)</h3><ul>${items}</ul></div>`;
     }
     if(a.tasks&&a.tasks.length){
-      const items=a.tasks.map(t=>`<li>☐ ${esc(t)}</li>`).join('');
-      html+=`<div class="analysis-section"><h3>Задачи (нужно сделать)</h3><ol>${items}</ol></div>`;
+      const rows=a.tasks.map((t,i)=>{const p=taskParts(t);
+        return `<tr><td style="width:28px;text-align:right;color:var(--muted)">${i+1}</td>`+
+               `<td>${esc(p.text)}</td>`+
+               `<td style="white-space:nowrap"><b>${p.owner?esc(p.owner):'—'}</b></td></tr>`;}).join('');
+      html+=`<div class="analysis-section"><h3>Задачи (нужно сделать)</h3>
+        <table><thead><tr><th>№</th><th>Задача</th><th>Ответственный</th></tr></thead>
+        <tbody>${rows}</tbody></table></div>`;
     } else {
       html+=`<div class="analysis-section"><h3>Задачи (нужно сделать)</h3><p class="empty">Задач не выявлено</p></div>`;
     }
     if(a.minor_tasks&&a.minor_tasks.length){
-      const items=a.minor_tasks.map(t=>`<li>☐ ${esc(t)}</li>`).join('');
+      const items=a.minor_tasks.map(t=>`<li>☐ ${taskHtml(t)}</li>`).join('');
       html+=`<div class="analysis-section"><h3>Мелкие задачи и доработки</h3><ul>${items}</ul></div>`;
     }
   }

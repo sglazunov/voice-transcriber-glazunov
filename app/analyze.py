@@ -31,41 +31,45 @@ _MAX_CHUNKS = 10
 # Shared description of the JSON shape we want back.
 _SCHEMA = (
     "{{\n"
-    '  "summary": "краткое описание о чём шёл разговор (3-5 предложений)",\n'
+    '  "summary": "краткое описание о чём шёл разговор (4-6 предложений)",\n'
     '  "detailed": [\n'
-    '    {{"topic": "Название темы", "details": "Подробно: что обсуждали, кто что '
-    'предложил, аргументы и возражения, цифры, к чему пришли"}}\n'
+    '    {{"topic": "Название темы", "details": "Очень подробно (4-8 предложений): что '
+    'обсуждали, кто что предложил, какие аргументы и возражения, конкретика, цифры, '
+    'примеры, к чему пришли"}}\n'
     "  ],\n"
     '  "key_thoughts": ["ключевая мысль 1", "ключевая мысль 2"],\n'
     '  "conclusions": ["вывод/итог 1", "вывод/итог 2"],\n'
     '  "decisions": ["принятое решение/договорённость 1", "..."],\n'
-    '  "done_tasks": ["уже сделанная/выполненная задача 1", "..."],\n'
-    '  "tasks": ["задача, которую нужно сделать (крупная) 1", "..."],\n'
-    '  "minor_tasks": ["мелкая задача/доработка, которую нужно сделать 1", "..."]\n'
+    '  "done_tasks": [{{"task": "что уже сделано/выполнено", "owner": "кто сделал, или —"}}],\n'
+    '  "tasks": [{{"task": "крупная задача, которую нужно сделать", "owner": "ответственный (имя/роль), или —"}}],\n'
+    '  "minor_tasks": [{{"task": "мелкая задача/доработка", "owner": "ответственный, или —"}}]\n'
     "}}"
 )
 
 _RULES = (
     "Правила:\n"
-    "- summary: 3-5 предложений, суть встречи в целом.\n"
-    "- detailed: ПОДРОБНЫЙ разбор по темам — раздели разговор на 4-9 тем/блоков. "
-    "По каждой теме 3-6 предложений: что именно обсуждали, какие были мнения, цифры, "
-    "решения, спорные моменты. Это самая важная часть — пиши детально и конкретно, "
-    "ничего важного не упускай.\n"
-    "- key_thoughts: 6-12 ключевых тезисов.\n"
+    "- summary: 4-6 предложений, суть встречи в целом.\n"
+    "- detailed: МАКСИМАЛЬНО ПОДРОБНЫЙ разбор по темам — раздели разговор на 6-12 "
+    "тем/блоков. По каждой теме 4-8 предложений: что именно обсуждали, кто что "
+    "предложил и кто возражал, аргументы обеих сторон, конкретные детали, цифры, "
+    "примеры, к чему в итоге пришли. Это самая важная часть — пиши развёрнуто и "
+    "конкретно, не обобщай, ничего важного не упускай.\n"
+    "- key_thoughts: 8-14 ключевых тезисов.\n"
     "- conclusions: ВЫВОДЫ и итоги — к чему в целом пришла команда, оценка статуса/"
-    "ситуации, общие заключения (3-7 пунктов).\n"
+    "ситуации, общие заключения (4-8 пунктов).\n"
     "- decisions: что именно решили/договорились (пустой список, если решений нет).\n"
-    "- done_tasks: что УЖЕ СДЕЛАНО/выполнено к моменту встречи — задачи и работы, про "
-    "которые участники сказали, что они готовы, закрыты, починены или сделаны. Пустой "
-    "список, если таких нет.\n"
-    "- tasks: что НУЖНО СДЕЛАТЬ — крупные задачи и действия на будущее.\n"
-    "- minor_tasks: ОБЯЗАТЕЛЬНО выпиши и мелкие, второстепенные задачи и доработки, "
-    "которые нужно сделать — то, что прозвучало вскользь: мелкие правки UI, "
-    "договорённости об именовании (названия тегов, кнопок, сущностей), кто кому что "
-    "скинет/даст доступ, мелкие техдоделки. Перечисли по пунктам.\n"
-    "- Не путай сделанное с тем, что нужно сделать: done_tasks — прошедшее время "
-    "(сделал/готово/починил), tasks и minor_tasks — будущее (нужно/сделать/доработать).\n"
+    "- done_tasks: что УЖЕ СДЕЛАНО/выполнено к моменту встречи (готово, закрыто, "
+    "починено). У каждого пункта owner — кто это сделал (имя/роль, или '—').\n"
+    "- tasks: что НУЖНО СДЕЛАТЬ — крупные задачи на будущее. У каждой owner — "
+    "ОТВЕТСТВЕННЫЙ. Определи его из разговора: кто сказал «возьму/беру/сделаю», кому "
+    "поручили, кого назвали по имени. Если ответственный явно не назван — owner: '—'.\n"
+    "- minor_tasks: ОБЯЗАТЕЛЬНО выпиши и мелкие, второстепенные задачи и доработки "
+    "(мелкие правки UI, договорённости об именовании — названия тегов/кнопок/сущностей, "
+    "кто кому что скинет/даст доступ). У каждой тоже owner (или '—').\n"
+    "- owner — это конкретный человек или роль (например: «Сергей», «Кирилл», "
+    "«дизайнер», «бэкенд»), НЕ выдумывай имена, бери только из текста.\n"
+    "- Не путай сделанное с тем, что нужно сделать: done_tasks — прошедшее время, "
+    "tasks и minor_tasks — будущее.\n"
     "- Всё на русском языке. Верни ТОЛЬКО JSON, без markdown и пояснений."
 )
 
@@ -84,8 +88,9 @@ _MAP_TEMPLATE = (
     "• Ключевые мысли, решения и договорённости.\n"
     "• ВСЕ задачи и действия, включая мелкие и второстепенные (мелкие правки UI, "
     "договорённости об именовании — названия тегов/кнопок/сущностей, кто кому даёт "
-    "доступ/что-то скидывает, мелкие техдоделки).\n"
-    "Пиши списком, без вступления и заключения. Сохраняй конкретику.\n\n"
+    "доступ/что-то скидывает, мелкие техдоделки). Для каждой задачи укажи "
+    "ОТВЕТСТВЕННОГО, если в тексте сказано, кто её берёт/кому поручили.\n"
+    "Пиши списком, без вступления и заключения. Сохраняй конкретику и имена.\n\n"
     "Фрагмент:\n{chunk}"
 )
 
@@ -145,14 +150,14 @@ def analyze_transcript(transcript_text: str, provider: str | None = None) -> dic
     text = (transcript_text or "").strip()
 
     if len(text) <= _MAX_CHARS:
-        raw = backend.complete(_PROMPT_TEMPLATE.format(transcript=text), max_tokens=4000)
+        raw = backend.complete(_PROMPT_TEMPLATE.format(transcript=text), max_tokens=6000)
     else:
         chunks = _split_chunks(text)
         notes_parts = []
         for i, chunk in enumerate(chunks, 1):
             note = backend.complete(
                 _MAP_TEMPLATE.format(i=i, n=len(chunks), chunk=chunk),
-                max_tokens=1400,
+                max_tokens=1800,
                 force_json=False,
             )
             notes_parts.append(f"=== Часть {i} ===\n{note.strip()}")
@@ -160,22 +165,45 @@ def analyze_transcript(transcript_text: str, provider: str | None = None) -> dic
             if backend.name == "groq" and i < len(chunks):
                 time.sleep(2)
         notes = "\n\n".join(notes_parts)
-        raw = backend.complete(_REDUCE_TEMPLATE.format(notes=notes), max_tokens=4000)
+        raw = backend.complete(_REDUCE_TEMPLATE.format(notes=notes), max_tokens=6000)
 
     result = _extract_json(raw)
 
     # Normalise — guarantee the shape the rest of the app expects.
     result.setdefault("summary", "")
     result.setdefault("detailed", [])
-    for list_key in ("key_thoughts", "conclusions", "decisions",
-                     "done_tasks", "tasks", "minor_tasks"):
+    # Plain string lists.
+    for list_key in ("key_thoughts", "conclusions", "decisions"):
         val = result.get(list_key, [])
         if isinstance(val, str):
             val = [val] if val.strip() else []
         result[list_key] = [str(x).strip() for x in val if str(x).strip()]
+    # Task lists carry an owner.
+    for list_key in ("done_tasks", "tasks", "minor_tasks"):
+        result[list_key] = _normalise_tasks(result.get(list_key, []))
     result["detailed"] = _normalise_detailed(result["detailed"])
     result["_provider"] = backend.name
     return result
+
+
+def _normalise_tasks(tasks) -> list[dict]:
+    """Coerce a task list into [{task, owner}], tolerating plain strings."""
+    if not tasks:
+        return []
+    if isinstance(tasks, str):
+        tasks = [tasks]
+    out = []
+    for item in tasks:
+        if isinstance(item, dict):
+            text = str(item.get("task") or item.get("title") or item.get("text") or "").strip()
+            owner = str(item.get("owner") or item.get("assignee") or "").strip()
+        else:
+            text, owner = str(item).strip(), ""
+        if owner in ("—", "-", "не назначен", "неизвестно", "?"):
+            owner = ""
+        if text:
+            out.append({"task": text, "owner": owner})
+    return out
 
 
 def _normalise_detailed(detailed) -> list[dict]:

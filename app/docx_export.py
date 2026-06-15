@@ -6,6 +6,13 @@ from pathlib import Path
 from typing import List, Optional
 
 
+def _task_parts(item) -> tuple[str, str]:
+    """Return (text, owner) for a task, tolerating plain strings or dicts."""
+    if isinstance(item, dict):
+        return (str(item.get("task") or "").strip(), str(item.get("owner") or "").strip())
+    return (str(item).strip(), "")
+
+
 def _fmt_time(seconds: float) -> str:
     s = int(seconds)
     h, rem = divmod(s, 3600)
@@ -117,17 +124,30 @@ def generate_report(
     done_tasks = analysis.get("done_tasks", [])
     if done_tasks:
         doc.add_heading("Сделано (выполненные задачи)", level=1)
-        for task in done_tasks:
-            tp = doc.add_paragraph(style="List Bullet")
-            tp.add_run(f"☑ {task}")  # ☑ checked box
+        for item in done_tasks:
+            text, owner = _task_parts(item)
+            bp = doc.add_paragraph(style="List Bullet")
+            bp.add_run(f"☑ {text}")
+            if owner:
+                r = bp.add_run(f"  — {owner}")
+                r.italic = True
+                r.font.color.rgb = RGBColor(0x60, 0x60, 0x60)
 
-    # ---- Задачи (нужно сделать) --------------------------------------------
+    # ---- Задачи (нужно сделать): таблица с ответственными ------------------
     tasks = analysis.get("tasks", [])
     doc.add_heading("Задачи (нужно сделать)", level=1)
     if tasks:
-        for task in tasks:
-            tp = doc.add_paragraph(style="List Number")
-            tp.add_run(f"☐ {task}")  # ☐ empty checkbox
+        table = doc.add_table(rows=1, cols=3)
+        table.style = "Table Grid"
+        for cell, title in zip(table.rows[0].cells, ("№", "Задача", "Ответственный")):
+            cell.paragraphs[0].add_run(title).bold = True
+        for i, item in enumerate(tasks, 1):
+            text, owner = _task_parts(item)
+            row = table.add_row().cells
+            row[0].paragraphs[0].add_run(str(i))
+            row[1].paragraphs[0].add_run(text)
+            row[2].paragraphs[0].add_run(owner or "—")
+        doc.add_paragraph().paragraph_format.space_after = Pt(6)
     else:
         doc.add_paragraph("Задач не выявлено.").paragraph_format.space_after = Pt(6)
 
@@ -135,9 +155,14 @@ def generate_report(
     minor = analysis.get("minor_tasks", [])
     if minor:
         doc.add_heading("Мелкие задачи и доработки", level=1)
-        for task in minor:
-            tp = doc.add_paragraph(style="List Bullet")
-            tp.add_run(f"☐ {task}")
+        for item in minor:
+            text, owner = _task_parts(item)
+            bp = doc.add_paragraph(style="List Bullet")
+            bp.add_run(f"☐ {text}")
+            if owner:
+                r = bp.add_run(f"  — {owner}")
+                r.italic = True
+                r.font.color.rgb = RGBColor(0x60, 0x60, 0x60)
 
     # ---- Full transcript on new page ----------------------------------------
     doc.add_page_break()
