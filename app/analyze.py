@@ -104,6 +104,17 @@ _REDUCE_TEMPLATE = (
 )
 
 
+# The full instruction the model normally receives (everything except the
+# transcript itself). Shown in "expert mode" so the user can edit it. Single
+# braces here (no .format applied), unlike the templates above.
+EXPERT_PROMPT_DEFAULT = (
+    "Проанализируй транскрипцию рабочей встречи (она добавляется ниже; "
+    "автоматическая расшифровка, возможны ошибки распознавания) и верни ответ "
+    "ТОЛЬКО в виде JSON.\n\n"
+    "Формат ответа:\n" + _SCHEMA.replace("{{", "{").replace("}}", "}") + "\n\n" + _RULES
+)
+
+
 def _extract_json(raw: str) -> dict:
     """Parse the model's answer into a dict, tolerating code fences / stray text."""
     raw = raw.strip()
@@ -148,21 +159,28 @@ def _with_extra(prompt: str, extra: str) -> str:
 
 
 def analyze_transcript(transcript_text: str, provider: str | None = None,
-                       extra_instructions: str = "") -> dict:
+                       extra_instructions: str = "", custom_prompt: str = "") -> dict:
     """Send the transcript to the chosen LLM provider and return structured analysis.
 
     `provider` is one of "ollama" | "groq" | "gemini" | "yandex" | "gigachat" |
-    "anthropic" | "auto" | None. `extra_instructions` is optional free-form text
-    from the user that steers the analysis (the JSON shape stays fixed).
+    "anthropic" | "auto" | None.
+    `extra_instructions` — optional free-form text appended to the prompt.
+    `custom_prompt` — EXPERT MODE: a full replacement for the built-in instruction
+    (the transcript / notes are still appended by the app). If it doesn't ask for
+    the same JSON fields, the Word export may come out empty — caller's risk.
     Returns a dict with keys: summary, detailed, key_thoughts, conclusions,
     decisions, done_tasks, tasks, minor_tasks, _provider.
     """
     backend = llm.get_provider(provider)
     text = (transcript_text or "").strip()
+    custom = (custom_prompt or "").strip()
 
     if len(text) <= _MAX_CHARS:
-        prompt = _with_extra(_PROMPT_TEMPLATE.format(transcript=text), extra_instructions)
-        raw = backend.complete(prompt, max_tokens=6000)
+        if custom:
+            prompt = custom + "\n\nТранскрипция:\n" + text
+        else:
+            prompt = _PROMPT_TEMPLATE.format(transcript=text)
+        raw = backend.complete(_with_extra(prompt, extra_instructions), max_tokens=6000)
     else:
         chunks = _split_chunks(text)
         notes_parts = []
@@ -177,8 +195,12 @@ def analyze_transcript(transcript_text: str, provider: str | None = None,
             if backend.name == "groq" and i < len(chunks):
                 time.sleep(2)
         notes = "\n\n".join(notes_parts)
-        prompt = _with_extra(_REDUCE_TEMPLATE.format(notes=notes), extra_instructions)
-        raw = backend.complete(prompt, max_tokens=6000)
+        if custom:
+            prompt = (custom + "\n\nНиже — заметки по последовательным частям "
+                      "встречи; объедини их в итог по требованиям выше:\n" + notes)
+        else:
+            prompt = _REDUCE_TEMPLATE.format(notes=notes)
+        raw = backend.complete(_with_extra(prompt, extra_instructions), max_tokens=6000)
 
     result = _extract_json(raw)
 

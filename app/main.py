@@ -9,7 +9,7 @@ from fastapi.responses import HTMLResponse, PlainTextResponse, FileResponse, JSO
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
-from . import config, llm
+from . import config, llm, analyze
 from .jobs import store, STATUS_DONE, STATUS_ANALYZING, STATUS_CANCELLED
 
 
@@ -55,6 +55,7 @@ async def create_job(
     hint: str = Form(""),
     glossary: str = Form(""),
     instructions: str = Form(""),
+    custom_prompt: str = Form(""),
 ):
     ext = Path(file.filename or "").suffix.lower()
     if ext not in ALLOWED_EXT:
@@ -77,7 +78,8 @@ async def create_job(
     job = store.create(file.filename, str(dest), language, want_diar,
                        initial_prompt=hint.strip(), glossary=glossary.strip(),
                        analyze=want_analyze, provider=provider,
-                       analysis_instructions=instructions.strip())
+                       analysis_instructions=instructions.strip(),
+                       analysis_prompt=custom_prompt.strip())
     return JSONResponse({"job_id": job.id, **job.to_public()}, status_code=201)
 
 
@@ -164,15 +166,29 @@ def cancel_job(job_id: str):
     return _control(job_id, "cancel")
 
 
+class ReanalyzeBody(BaseModel):
+    provider: str = "auto"
+    instructions: str | None = None
+    custom_prompt: str | None = None
+
+
 @app.post("/api/jobs/{job_id}/reanalyze")
-def reanalyze_job(job_id: str, provider: str = "auto", instructions: str | None = None):
+def reanalyze_job(job_id: str, body: ReanalyzeBody):
     try:
-        job = store.reanalyze(job_id, provider=provider, instructions=instructions)
+        job = store.reanalyze(job_id, provider=body.provider,
+                              instructions=body.instructions,
+                              custom_prompt=body.custom_prompt)
     except KeyError:
         raise HTTPException(404, "Задача не найдена")
     except ValueError as e:
         raise HTTPException(409, str(e))
     return job.to_public()
+
+
+@app.get("/api/prompt/default")
+def prompt_default():
+    """The built-in analysis prompt, for the expert-mode editor."""
+    return {"prompt": analyze.EXPERT_PROMPT_DEFAULT}
 
 
 def _control(job_id: str, action: str):

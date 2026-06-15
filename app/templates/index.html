@@ -163,6 +163,21 @@
         <label class="muted" style="margin-top:8px;display:block">Свои требования к разбору — добавятся к запросу. Структура документа (разбор/выводы/задачи) остаётся прежней.</label>
         <textarea id="instructions" rows="3" placeholder="Напр.: выдели риски и блокеры; задачи опиши максимально подробно; добавь раздел «следующие шаги»; пиши деловым языком"></textarea>
       </details>
+
+      <details class="adv" style="margin-top:10px">
+        <summary>🧪 Режим эксперта — полный промпт</summary>
+        <div class="muted" style="margin:8px 0;font-size:12px;line-height:1.5">
+          Полный контроль над запросом к ИИ. <b>Внимание:</b> если убрать из промпта
+          нужные поля JSON (summary, detailed, tasks и т.д.), Word-документ может
+          получиться пустым. Оставьте поле пустым — будет использован стандартный промпт.
+        </div>
+        <div class="row" style="margin-bottom:6px">
+          <button class="ghost" type="button" onclick="loadDefaultPrompt()">📥 Загрузить стандартный</button>
+          <button class="ghost" type="button" onclick="clearExpertPrompt()">🧹 Очистить</button>
+        </div>
+        <textarea id="expertPrompt" rows="12" spellcheck="false"
+                  placeholder="Пусто = стандартный промпт. Нажмите «Загрузить стандартный», чтобы отредактировать его."></textarea>
+      </details>
     </div>
 
     <div id="drop" style="margin-top:14px">
@@ -268,6 +283,11 @@ async function loadProviders(){
   if(avail.includes(prev))sel.value=prev;
   $('noEngine').classList.toggle('hidden',avail.length>0);
 }
+async function loadDefaultPrompt(){
+  try{const d=await(await fetch("/api/prompt/default")).json();
+    if(d.prompt)$("expertPrompt").value=d.prompt;}catch{}
+}
+function clearExpertPrompt(){$("expertPrompt").value="";}
 function onApiProviderChange(){
   const p=$('apiProvider').value;
   const ph={anthropic:"sk-ant-...",groq:"gsk_...",gemini:"AIza... (Google AI Studio)",
@@ -287,7 +307,11 @@ async function resumeFailedAnalysis(provider){
   let target=jobs.find(j=>j.id===viewId&&failed(j))||jobs.find(failed);
   if(!target)return false;
   viewId=target.id;
-  try{await fetch(`/api/jobs/${target.id}/reanalyze?provider=${encodeURIComponent(provider)}`,{method:"POST"});}
+  const body={provider:provider,
+    instructions:($("instructions")&&$("instructions").value)||"",
+    custom_prompt:($("expertPrompt")&&$("expertPrompt").value)||""};
+  try{await fetch(`/api/jobs/${target.id}/reanalyze`,{method:"POST",
+      headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});}
   catch{return false;}
   refresh();
   return true;
@@ -352,6 +376,7 @@ $("go").onclick=()=>{
   fd.append("hint",$("hint").value);
   fd.append("glossary",$("glossary").value);
   fd.append("instructions",($("instructions")&&$("instructions").value)||"");
+  fd.append("custom_prompt",($("expertPrompt")&&$("expertPrompt").value)||"");
   const xhr=new XMLHttpRequest();
   xhr.open("POST","/api/jobs");
   $("upwrap").classList.remove("hidden");$("go").disabled=true;
@@ -588,11 +613,13 @@ async function reanalyzeJob(){
   if(!viewId) return;
   // Use whichever engine is currently selected, so a rate-limited Groq job can
   // be retried with e.g. local Ollama by just switching the dropdown first.
-  const sel=$("provider");
-  const prov=(sel&&sel.value)?sel.value:"auto";
-  const instr=($("instructions")&&$("instructions").value)||"";
-  const url=`/api/jobs/${viewId}/reanalyze?provider=${encodeURIComponent(prov)}&instructions=${encodeURIComponent(instr)}`;
-  try{ const r=await fetch(url,{method:"POST"});
+  const body={
+    provider:($("provider")&&$("provider").value)||"auto",
+    instructions:($("instructions")&&$("instructions").value)||"",
+    custom_prompt:($("expertPrompt")&&$("expertPrompt").value)||"",
+  };
+  try{ const r=await fetch(`/api/jobs/${viewId}/reanalyze`,{method:"POST",
+        headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
        if(!r.ok){const d=await r.json().catch(()=>({}));alert(d.detail||"Не удалось запустить анализ");} }
   catch{}
   refresh();
