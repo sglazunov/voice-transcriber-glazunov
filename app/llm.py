@@ -94,15 +94,32 @@ def _http_post_json(url: str, payload: dict, headers: dict, timeout: int = 180,
 
 
 # ---------------------------------------------------------------------------
-class OllamaProvider:
-    """Local Ollama server. Free, offline, no API key."""
+def list_ollama_models() -> list[str]:
+    """Names of models installed in the local Ollama server (empty if down)."""
+    url = config.OLLAMA_URL.rstrip("/") + "/api/tags"
+    try:
+        with urllib.request.urlopen(url, timeout=3) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        return [m.get("name", "") for m in data.get("models", []) if m.get("name")]
+    except Exception:
+        return []
 
-    name = "ollama"
+
+class OllamaProvider:
+    """Local Ollama server. Free, offline, no API key.
+
+    A specific model can be chosen per job; `name` carries it (e.g.
+    "ollama:vtx-protocol") so per-model Word docs and labels stay distinct.
+    """
+
+    def __init__(self, model: str | None = None) -> None:
+        self.model = model or config.OLLAMA_MODEL
+        self.name = f"ollama:{self.model}"
 
     def complete(self, prompt: str, max_tokens: int = 2000, force_json: bool = True) -> str:
         url = config.OLLAMA_URL.rstrip("/") + "/api/generate"
         payload = {
-            "model": config.OLLAMA_MODEL,
+            "model": self.model,
             "prompt": prompt,
             "stream": False,
             "options": {"temperature": 0.2, "num_predict": max_tokens},
@@ -275,6 +292,16 @@ _PROVIDERS = {
 
 
 def get_provider(name: str | None) -> LLMProvider:
-    """Resolve 'auto'/None to a concrete configured provider and instantiate it."""
-    resolved = config.resolve_provider(name)
+    """Resolve 'auto'/None to a concrete configured provider and instantiate it.
+
+    Ollama may carry a specific model as "ollama:<model>" (e.g.
+    "ollama:qwen2.5:7b"); the part after the first ':' is the model name.
+    """
+    ollama_model = None
+    base = name
+    if name and name.lower().startswith("ollama:"):
+        base, ollama_model = "ollama", name.split(":", 1)[1]
+    resolved = config.resolve_provider(base)
+    if resolved == "ollama":
+        return OllamaProvider(model=ollama_model)
     return _PROVIDERS[resolved]()

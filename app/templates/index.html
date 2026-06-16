@@ -273,15 +273,22 @@ const PROV_LABELS={ollama:"Локально · Ollama (бесплатно)",
                    anthropic:"Claude (платно)"};
 const PROV_SHORT={ollama:"Ollama",groq:"Groq",gemini:"Gemini",
                   yandex:"YandexGPT",gigachat:"GigaChat",anthropic:"Claude"};
+/* Friendly name for a provider value, incl. per-model Ollama ("ollama:<model>"). */
+function prettyProvider(p){
+  if(!p)return"";
+  if(p.indexOf("ollama:")===0)return "Ollama · "+p.slice(7);
+  return PROV_SHORT[p]||PROV_LABELS[p]||p;
+}
 async function loadProviders(){
   let data;
   try{const r=await fetch("/api/providers");if(!r.ok)return;data=await r.json();}catch{return;}
-  const avail=data.available||[];
+  // engines = each installed Ollama model (value "ollama:<model>") + cloud providers
+  const engines=data.engines||[];
   const sel=$('provider');
   const prev=sel.value;
-  sel.innerHTML=avail.map(id=>`<option value="${id}">${esc(PROV_LABELS[id]||id)}</option>`).join("");
-  if(avail.includes(prev))sel.value=prev;
-  $('noEngine').classList.toggle('hidden',avail.length>0);
+  sel.innerHTML=engines.map(e=>`<option value="${esc(e.value)}">${esc(e.label)}</option>`).join("");
+  if(prev&&engines.some(e=>e.value===prev))sel.value=prev;
+  $('noEngine').classList.toggle('hidden',engines.length>0);
 }
 async function loadDefaultPrompt(){
   try{const d=await(await fetch("/api/prompt/default")).json();
@@ -443,8 +450,7 @@ function renderAnalysis(job){
     html+=`<div class="analysis-err">⚠ Ошибка анализа: ${esc(msg)}
       <div style="margin-top:8px"><button class="ghost" onclick="reanalyzeJob()">🔄 Повторить анализ</button></div></div>`;
   } else if(a.summary){
-    const provNames={ollama:"Ollama (локально)",groq:"Groq (бесплатно)",gemini:"Google Gemini",yandex:"YandexGPT",gigachat:"GigaChat (Sber)",anthropic:"Claude (платно)"};
-    const prov=a._provider?provNames[a._provider]||a._provider:"";
+    const prov=prettyProvider(a._provider);
     if(prov)html+=`<div class="muted" style="margin-bottom:8px">🤖 Движок: ${esc(prov)}</div>`;
     html+=`<div class="analysis-section"><h3>О чём шёл разговор</h3><p>${esc(a.summary)}</p></div>`;
 
@@ -562,7 +568,7 @@ async function updateLive(){
       tools+=`<a class="dl" href="/api/jobs/${viewId}/result?format=docx&provider=${encodeURIComponent(p)}"
                style="background:linear-gradient(90deg,#0ea5e9,#6366f1);color:#fff;
                       padding:7px 14px;border-radius:8px;text-decoration:none;font-weight:600;
-                      font-size:13px;">📄 Word · ${esc(PROV_SHORT[p]||p)}</a>`;
+                      font-size:13px;">📄 Word · ${esc(prettyProvider(p))}</a>`;
     });
     if(job.analyze){
       tools+=`<button class="ghost" onclick="reanalyzeJob()"

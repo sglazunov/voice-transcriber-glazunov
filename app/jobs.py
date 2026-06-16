@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import queue
+import re
 import threading
 import time
 import traceback
@@ -143,8 +144,13 @@ class JobStore:
         return config.RESULT_DIR / f"{job_id}.{fmt}"
 
     def docx_path(self, job_id: str, provider: str) -> Path:
-        """Per-engine Word document, so docs from different engines coexist."""
-        return config.RESULT_DIR / f"{job_id}__{provider}.docx"
+        """Per-engine Word document, so docs from different engines coexist.
+
+        The provider can be like "ollama:qwen2.5:7b" — sanitise it so the
+        colon/slash don't produce an invalid Windows filename.
+        """
+        safe = re.sub(r"[^A-Za-z0-9._-]", "-", provider or "engine")
+        return config.RESULT_DIR / f"{job_id}__{safe}.docx"
 
     # ---- control (pause / resume / cancel) ---------------------------------
     def pause(self, job_id: str) -> Job:
