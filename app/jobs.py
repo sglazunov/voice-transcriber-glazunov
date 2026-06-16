@@ -94,10 +94,16 @@ class JobStore:
                 raw = json.loads(config.JOBS_FILE.read_text(encoding="utf-8"))
                 for d in raw:
                     job = Job(**d)
-                    # Anything left "running" after a crash is marked failed.
-                    if job.status in (STATUS_RUNNING, STATUS_QUEUED):
+                    # Nothing survives a restart mid-flight (no worker resumes it).
+                    if job.status in (STATUS_RUNNING, STATUS_QUEUED, STATUS_PAUSED):
                         job.status = STATUS_ERROR
                         job.error = "Прервано (сервис был перезапущен)."
+                    elif job.status == STATUS_ANALYZING:
+                        # Transcript is already saved — keep it, just flag the
+                        # analysis so the user can re-run it in one click.
+                        job.status = STATUS_DONE
+                        job.analysis_error = ("Анализ прерван (сервис перезапущен). "
+                                              "Нажмите «Повторить анализ».")
                     self._jobs[job.id] = job
             except Exception:
                 pass
