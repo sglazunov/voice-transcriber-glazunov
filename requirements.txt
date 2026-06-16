@@ -4,8 +4,17 @@ uvicorn[standard]==0.32.*
 python-multipart==0.0.*
 jinja2==3.1.*
 
-# Transcription engine (CPU, int8) — lightweight, fits 4 GB RAM
+# Transcription engine (CPU, int8)
 faster-whisper==1.2.*
+# Pin CTranslate2 to 4.4.0 on purpose: the 4.8.0 Windows wheel segfaults
+# (access violation) when loading a model on this AMD Ryzen 5 5500U box.
+ctranslate2==4.4.0
+# CTranslate2 4.4.0 imports pkg_resources, which setuptools >= 81 dropped.
+setuptools<80
+# NOTE: faster-whisper's VAD uses onnxruntime, whose native DLL needs the
+# Microsoft Visual C++ Redistributable (x64). If you see "DLL load failed"
+# install it: winget install Microsoft.VCRedist.2015+.x64
+# Requires Python 3.12 (3.14 is not yet supported by the native deps).
 
 # Word document generation (protocol export)
 python-docx>=1.1

@@ -14,8 +14,10 @@ call ".venv\Scripts\activate.bat"
 
 REM === Настройки под этот ПК (Ryzen 5 5500U, 12 потоков, 14 ГБ RAM) ===
 set PYTHONUTF8=1
-REM Модель Whisper: medium = заметно лучше русский, чем small (помещается в 14 ГБ)
-if "%VTX_MODEL%"=="" set VTX_MODEL=medium
+REM Модель Whisper: small уже скачана и грузится мгновенно. medium точнее, но
+REM её ~1.5 ГБ качаются с HuggingFace при первом запуске (может зависнуть на
+REM медленном интернете). Переключайтесь на medium только когда она скачается.
+if "%VTX_MODEL%"=="" set VTX_MODEL=small
 REM Качество распознавания (beam search) — у CPU есть запас
 if "%VTX_BEAM_SIZE%"=="" set VTX_BEAM_SIZE=5
 REM Физические ядра (6 у 5500U) — оптимум для движка, остальное оставляем ОС
