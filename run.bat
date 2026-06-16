@@ -27,7 +27,10 @@ if "%VTX_DIARIZATION%"=="" set VTX_DIARIZATION=0
 
 REM === Протокол встречи: локальный ИИ через Ollama (бесплатно, оффлайн) ===
 if "%VTX_OLLAMA%"=="" set VTX_OLLAMA=1
-if "%VTX_OLLAMA_MODEL%"=="" set VTX_OLLAMA_MODEL=qwen2.5:7b
+REM Кастомная модель vtx-protocol (system-промпт + большой контекст), создаётся
+REM через make_protocol_model.bat. Если её нет — будет ошибка анализа; тогда
+REM поставьте здесь qwen2.5:7b или запустите make_protocol_model.bat.
+if "%VTX_OLLAMA_MODEL%"=="" set VTX_OLLAMA_MODEL=vtx-protocol
 REM Запускаем сервер Ollama, если он установлен и ещё не поднят
 set "OLLAMA_EXE=%LOCALAPPDATA%\Programs\Ollama\ollama.exe"
 if exist "%OLLAMA_EXE%" (
