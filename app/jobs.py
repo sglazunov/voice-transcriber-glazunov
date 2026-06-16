@@ -71,6 +71,8 @@ class JobStore:
         self._jobs: Dict[str, Job] = {}
         # Live partial transcript per job (in-memory only), for streaming UI.
         self._partial: Dict[str, list] = {}
+        # Live analysis progress per job (stage + streamed text), in-memory only.
+        self._analysis: Dict[str, dict] = {}
         # Per-job control flags (pause/cancel), in-memory only.
         self._control: Dict[str, dict] = {}
         # Serialises on-demand re-analysis so two LLM runs can't overlap.
@@ -136,6 +138,17 @@ class JobStore:
     def partial(self, job_id: str) -> list:
         """Segments transcribed so far (live), for the streaming UI."""
         return self._partial.get(job_id, [])
+
+    def analysis_progress(self, job_id: str) -> dict:
+        """Live analysis stage + streamed text (in-memory), for the UI."""
+        return self._analysis.get(job_id, {})
+
+    def _on_analysis(self, job_id: str):
+        """Build an on_progress(stage, text) callback that updates the live buffer."""
+        def cb(stage: str, text: str = "") -> None:
+            self._analysis[job_id] = {"stage": stage, "text": text,
+                                      "chars": len(text)}
+        return cb
 
     def list(self) -> list[Job]:
         return sorted(self._jobs.values(), key=lambda j: j.created_at, reverse=True)
@@ -214,6 +227,7 @@ class JobStore:
         return job
 
     def _do_reanalyze(self, job: Job, txt: str) -> None:
+        self._analysis[job.id] = {"stage": "Готовлю анализ…", "text": "", "chars": 0}
         self._set(job, status=STATUS_ANALYZING, analysis_error=None)
         try:
             from .analyze import analyze_transcript
@@ -221,7 +235,8 @@ class JobStore:
 
             result = analyze_transcript(txt, provider=job.provider,
                                         extra_instructions=job.analysis_instructions,
-                                        custom_prompt=job.analysis_prompt)
+                                        custom_prompt=job.analysis_prompt,
+                                        on_progress=self._on_analysis(job.id))
             prov = result.get("_provider") or job.provider
             segs = []
             jp = self.result_path(job.id, "json")
@@ -363,6 +378,7 @@ class JobStore:
             analysis_result = None
             analysis_err = None
             if job.analyze:
+                self._analysis[job.id] = {"stage": "Готовлю анализ…", "text": "", "chars": 0}
                 self._set(job, status=STATUS_ANALYZING, persist=True)
                 try:
                     from .analyze import analyze_transcript
@@ -371,7 +387,8 @@ class JobStore:
                     analysis_result = analyze_transcript(
                         txt_content, provider=job.provider,
                         extra_instructions=job.analysis_instructions,
-                        custom_prompt=job.analysis_prompt)
+                        custom_prompt=job.analysis_prompt,
+                        on_progress=self._on_analysis(job.id))
                     prov = analysis_result.get("_provider") or job.provider
                     segs_dicts = [
                         {"start": s.start, "end": s.end,

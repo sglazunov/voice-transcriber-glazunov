@@ -259,6 +259,7 @@ def get_partial(job_id: str):
         "status": job.status,
         "progress": job.progress,
         "segments": store.partial(job_id),
+        "analysis": store.analysis_progress(job_id),
     }
 
 

@@ -116,18 +116,47 @@ class OllamaProvider:
         self.model = model or config.OLLAMA_MODEL
         self.name = f"ollama:{self.model}"
 
-    def complete(self, prompt: str, max_tokens: int = 2000, force_json: bool = True) -> str:
+    def complete(self, prompt: str, max_tokens: int = 2000, force_json: bool = True,
+                 on_token=None) -> str:
         url = config.OLLAMA_URL.rstrip("/") + "/api/generate"
         payload = {
             "model": self.model,
             "prompt": prompt,
-            "stream": False,
+            "stream": bool(on_token),
             "options": {"temperature": 0.2, "num_predict": max_tokens},
         }
         if force_json:
             payload["format"] = "json"  # constrain output to valid JSON
-        out = _http_post_json(url, payload, headers={}, timeout=600)
-        return (out.get("response") or "").strip()
+        if not on_token:
+            out = _http_post_json(url, payload, headers={}, timeout=600)
+            return (out.get("response") or "").strip()
+        # Streaming: Ollama returns NDJSON; surface the growing text live.
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url, data=data, method="POST")
+        req.add_header("Content-Type", "application/json")
+        acc: list[str] = []
+        try:
+            with urllib.request.urlopen(req, timeout=600) as resp:
+                for line in resp:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        obj = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    tok = obj.get("response", "")
+                    if tok:
+                        acc.append(tok)
+                        try:
+                            on_token("".join(acc))
+                        except Exception:
+                            pass
+                    if obj.get("done"):
+                        break
+        except urllib.error.URLError as e:
+            raise RuntimeError(f"Не удалось подключиться к {url}: {e.reason}") from e
+        return "".join(acc).strip()
 
 
 # ---------------------------------------------------------------------------
