@@ -77,6 +77,8 @@ def _start_server() -> tuple[object, int]:
     os.environ.setdefault("PYTHONUTF8", "1")
     os.environ.setdefault("VTX_MODEL", "small")
     os.environ.setdefault("VTX_OLLAMA", "1")
+    # Tuned local protocol model (created via make_protocol_model.bat).
+    os.environ.setdefault("VTX_OLLAMA_MODEL", "vtx-protocol")
 
     from app.main import app  # imported after env is set so config picks it up
 
