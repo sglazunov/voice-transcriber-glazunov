@@ -283,7 +283,13 @@ async function loadProviders(){
   let data;
   try{const r=await fetch("/api/providers");if(!r.ok)return;data=await r.json();}catch{return;}
   // engines = each installed Ollama model (value "ollama:<model>") + cloud providers
-  const engines=data.engines||[];
+  let engines=data.engines||[];
+  // Defensive: an older server build has no `engines` field (e.g. when the
+  // server wasn't restarted after an update). Fall back to `available` so the
+  // dropdown isn't empty — restart the server to get per-model entries.
+  if(!engines.length&&(data.available||[]).length){
+    engines=data.available.map(id=>({value:id,label:PROV_LABELS[id]||id}));
+  }
   const sel=$('provider');
   const prev=sel.value;
   sel.innerHTML=engines.map(e=>`<option value="${esc(e.value)}">${esc(e.label)}</option>`).join("");
