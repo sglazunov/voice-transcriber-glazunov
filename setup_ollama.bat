@@ -26,4 +26,11 @@ timeout /t 3 >nul
 echo === Скачиваю модель qwen2.5:7b (~4.7 ГБ, один раз) ===
 "%OLLAMA%" pull qwen2.5:7b
 
+echo === Создаю настроенную модель протокола "vtx-protocol" ===
+if exist "%~dp0Modelfile" (
+  "%OLLAMA%" create vtx-protocol -f "%~dp0Modelfile"
+) else (
+  echo [!] Modelfile не найден рядом — пропускаю; будет использована qwen2.5:7b.
+)
+
 echo Готово.

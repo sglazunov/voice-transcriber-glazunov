@@ -69,6 +69,35 @@ def _start_ollama() -> None:
         pass
 
 
+def _ensure_model() -> None:
+    """Create the tuned vtx-protocol model if missing (best effort, background).
+
+    Runs off the main thread so the window opens immediately; on first launch
+    it may pull the base model, after which the engine picker shows it.
+    """
+    exe = Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Ollama" / "ollama.exe"
+    if not exe.exists():
+        return
+    modelfile = next((p for p in (_resource_dir() / "Modelfile",
+                                  Path(sys.executable).parent / "Modelfile")
+                      if p.exists()), None)
+    if not modelfile:
+        return
+    flags = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
+    try:
+        time.sleep(3)  # give the server a moment to come up
+        listed = subprocess.run([str(exe), "list"], capture_output=True, text=True,
+                                timeout=20, creationflags=flags).stdout or ""
+        if "vtx-protocol" in listed:
+            return
+        if "qwen2.5:7b" not in listed:
+            subprocess.run([str(exe), "pull", "qwen2.5:7b"], timeout=3600, creationflags=flags)
+        subprocess.run([str(exe), "create", "vtx-protocol", "-f", str(modelfile)],
+                       timeout=600, creationflags=flags)
+    except Exception:
+        pass
+
+
 def _start_server() -> tuple[object, int]:
     """Launch uvicorn on a daemon thread; return (server, port)."""
     import uvicorn
@@ -93,6 +122,7 @@ def main() -> int:
     selftest = "--selftest" in sys.argv
 
     _start_ollama()
+    threading.Thread(target=_ensure_model, daemon=True, name="vtx-model").start()
     server, port = _start_server()
     base = f"http://{HOST}:{port}"
 

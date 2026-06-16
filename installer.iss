@@ -32,8 +32,9 @@ Name: "installollama"; Description: "Установить локальный И�
 [Files]
 ; The whole onedir output from PyInstaller.
 Source: "dist\VoiceTranscriber\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
-; Helper that installs Ollama + pulls the model.
+; Helper that installs Ollama + pulls/creates the model, plus the Modelfile.
 Source: "setup_ollama.bat"; DestDir: "{app}"; Flags: ignoreversion
+Source: "Modelfile"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
