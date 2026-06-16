@@ -203,13 +203,10 @@ def analyze_transcript(transcript_text: str, provider: str | None = None,
         chunks = _split_chunks(text)
         notes_parts = []
         for i, chunk in enumerate(chunks, 1):
-            if on_progress:
-                on_progress(f"Читаю встречу: часть {i} из {len(chunks)}…", "")
-            note = backend.complete(
-                _MAP_TEMPLATE.format(i=i, n=len(chunks), chunk=chunk),
-                max_tokens=1800,
-                force_json=False,
-            )
+            note = _stream_complete(
+                backend, _MAP_TEMPLATE.format(i=i, n=len(chunks), chunk=chunk),
+                1800, on_progress, f"Читаю встречу: часть {i} из {len(chunks)}…",
+                force_json=False)
             notes_parts.append(f"=== Часть {i} ===\n{note.strip()}")
             # Free cloud tiers rate-limit easily; pace the chunk calls a bit.
             if backend.name == "groq" and i < len(chunks):
