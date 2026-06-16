@@ -82,6 +82,17 @@
              border-top-color:var(--accent);border-radius:50%;
              animation:spin .7s linear infinite;margin-right:6px;vertical-align:middle}
     @keyframes spin{to{transform:rotate(360deg)}}
+    /* indeterminate sweeping progress bar (during LLM analysis) */
+    .bar.indet>i{width:40%!important;border-radius:8px;
+                 animation:indet 1.2s ease-in-out infinite;}
+    @keyframes indet{0%{margin-left:-42%}100%{margin-left:102%}}
+    /* live "generation" view while the protocol is being written */
+    .gen-stage{font-size:15px;font-weight:600;color:var(--txt);margin-bottom:4px}
+    .gen-meta{font-size:12px;color:var(--muted);margin-bottom:10px}
+    .gen-text{font-family:ui-monospace,Consolas,monospace;font-size:12px;line-height:1.5;
+              color:var(--muted);background:#0b1220;border:1px solid var(--line);
+              border-radius:10px;padding:10px;max-height:200px;overflow:auto;
+              white-space:pre-wrap;word-break:break-word}
 
     table{width:100%;border-collapse:collapse;font-size:13px}
     th,td{text-align:left;padding:9px 6px;border-bottom:1px solid var(--line);vertical-align:middle}
@@ -434,9 +445,9 @@ function renderAnalysis(job){
   if(!job.analyze){block.classList.add('hidden');return;}
 
   if(job.status==='analyzing'){
-    block.classList.remove('hidden');
-    block.innerHTML=`<div class="analysis-section"><h3>Анализ</h3>
-      <p><span class="spinner"></span>Модель анализирует транскрипцию…</p></div>`;
+    // The live generation view is rendered in the transcript area; keep this
+    // block hidden to avoid duplication.
+    block.classList.add('hidden');
     return;
   }
   if(job.status!=='done'){block.classList.add('hidden');return;}
@@ -526,6 +537,10 @@ async function updateLive(){
   $("lpct").textContent=pct+"%";$("lbar").style.width=pct+"%";
   if(job.duration){$("ldurwrap").classList.remove("hidden");$("ldur").textContent=human(job.duration);}
   if(job.speakers){$("lspkwrap").classList.remove("hidden");$("lspk").textContent=job.speakers;}
+  // Indeterminate sweeping bar while the LLM is analysing/generating.
+  const analyzing=job.status==="analyzing";
+  $("lbar").parentElement.classList.toggle("indet",analyzing);
+  if(analyzing)$("lpct").textContent="идёт…";
 
   renderAnalysis(job);
 
@@ -554,7 +569,19 @@ async function updateLive(){
 
   }else if(job.status==="analyzing"){
     startTs=job.started_at?job.started_at*1000:(startTs||Date.now());startTimer();
-    $("live").innerHTML='<div class="empty">Транскрипция завершена, строим протокол…</div>';
+    let a={};
+    try{const p=await(await fetch(`/api/jobs/${viewId}/partial`)).json();a=p.analysis||{};}catch{}
+    const stage=a.stage||"Анализирую транскрипцию…";
+    let html=`<div class="gen-stage"><span class="spinner"></span>${esc(stage)}</div>`;
+    html+=`<div class="gen-meta">`+
+          (a.chars?`сгенерировано ~${a.chars.toLocaleString('ru')} симв.`:"модель думает, первые слова скоро появятся…")+
+          `</div>`;
+    if(a.text){
+      // Live stream of what the model is writing (raw — formatted nicely once done).
+      html+=`<div class="gen-text" id="genText">${esc(a.text)}</div>`;
+    }
+    $("live").innerHTML=html;
+    const gt=$("genText");if(gt)gt.scrollTop=gt.scrollHeight;
     $("ltools").innerHTML="";
 
   }else if(job.status==="done"){

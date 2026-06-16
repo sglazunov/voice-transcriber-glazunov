@@ -158,8 +158,23 @@ def _with_extra(prompt: str, extra: str) -> str:
             "их, но сохрани формат JSON и все поля):\n" + extra)
 
 
+def _stream_complete(backend, prompt, max_tokens, on_progress, stage, force_json=True):
+    """Call backend.complete, streaming tokens to on_progress when supported.
+
+    Only Ollama streams; other providers return the full text in one shot (we
+    still emit the stage so the UI shows what's happening)."""
+    if on_progress:
+        on_progress(stage, "")
+    if on_progress and isinstance(backend, llm.OllamaProvider):
+        return backend.complete(
+            prompt, max_tokens=max_tokens, force_json=force_json,
+            on_token=lambda full: on_progress(stage, full))
+    return backend.complete(prompt, max_tokens=max_tokens, force_json=force_json)
+
+
 def analyze_transcript(transcript_text: str, provider: str | None = None,
-                       extra_instructions: str = "", custom_prompt: str = "") -> dict:
+                       extra_instructions: str = "", custom_prompt: str = "",
+                       on_progress=None) -> dict:
     """Send the transcript to the chosen LLM provider and return structured analysis.
 
     `provider` is one of "ollama" | "groq" | "gemini" | "yandex" | "gigachat" |
@@ -168,6 +183,8 @@ def analyze_transcript(transcript_text: str, provider: str | None = None,
     `custom_prompt` — EXPERT MODE: a full replacement for the built-in instruction
     (the transcript / notes are still appended by the app). If it doesn't ask for
     the same JSON fields, the Word export may come out empty — caller's risk.
+    `on_progress(stage, text)` — optional callback for the live UI: `stage` is a
+    human label, `text` is the growing generated text (Ollama streams it).
     Returns a dict with keys: summary, detailed, key_thoughts, conclusions,
     decisions, done_tasks, tasks, minor_tasks, _provider.
     """
@@ -180,11 +197,14 @@ def analyze_transcript(transcript_text: str, provider: str | None = None,
             prompt = custom + "\n\nТранскрипция:\n" + text
         else:
             prompt = _PROMPT_TEMPLATE.format(transcript=text)
-        raw = backend.complete(_with_extra(prompt, extra_instructions), max_tokens=6000)
+        raw = _stream_complete(backend, _with_extra(prompt, extra_instructions),
+                               6000, on_progress, "Генерация протокола…")
     else:
         chunks = _split_chunks(text)
         notes_parts = []
         for i, chunk in enumerate(chunks, 1):
+            if on_progress:
+                on_progress(f"Читаю встречу: часть {i} из {len(chunks)}…", "")
             note = backend.complete(
                 _MAP_TEMPLATE.format(i=i, n=len(chunks), chunk=chunk),
                 max_tokens=1800,
@@ -200,7 +220,8 @@ def analyze_transcript(transcript_text: str, provider: str | None = None,
                       "встречи; объедини их в итог по требованиям выше:\n" + notes)
         else:
             prompt = _REDUCE_TEMPLATE.format(notes=notes)
-        raw = backend.complete(_with_extra(prompt, extra_instructions), max_tokens=6000)
+        raw = _stream_complete(backend, _with_extra(prompt, extra_instructions),
+                               6000, on_progress, "Свожу протокол…")
 
     result = _extract_json(raw)
 
