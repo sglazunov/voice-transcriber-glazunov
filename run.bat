@@ -27,21 +27,20 @@ if "%VTX_DIARIZATION%"=="" set VTX_DIARIZATION=0
 
 REM === Протокол встречи: локальный ИИ через Ollama (бесплатно, оффлайн) ===
 if "%VTX_OLLAMA%"=="" set VTX_OLLAMA=1
-REM Кастомная модель vtx-protocol (system-промпт + большой контекст), создаётся
-REM через make_protocol_model.bat. Если её нет — будет ошибка анализа; тогда
-REM поставьте здесь qwen2.5:7b или запустите make_protocol_model.bat.
+REM Настроенная модель протокола — создаётся автоматически при первом запуске.
 if "%VTX_OLLAMA_MODEL%"=="" set VTX_OLLAMA_MODEL=vtx-protocol
-REM Запускаем сервер Ollama, если он установлен и ещё не поднят
 set "OLLAMA_EXE=%LOCALAPPDATA%\Programs\Ollama\ollama.exe"
 if exist "%OLLAMA_EXE%" (
-  tasklist /FI "IMAGENAME eq ollama.exe" 2>nul | find /I "ollama.exe" >nul || (
-    echo  Запускаю Ollama...
-    start "" /B "%OLLAMA_EXE%" serve
+  REM Поднимаем сервер Ollama, если он ещё не запущен.
+  tasklist /FI "IMAGENAME eq ollama.exe" 2>nul | find /I "ollama.exe" >nul || ( echo  Запускаю Ollama... & start "" /B "%OLLAMA_EXE%" serve & timeout /t 3 >nul )
+  REM Первый запуск: создаём кастомную модель vtx-protocol из Modelfile (один раз).
+  "%OLLAMA_EXE%" list 2>nul | find /I "vtx-protocol" >nul || (
+    echo  Готовлю модель протокола "vtx-protocol" ^(один раз; при необходимости скачается qwen2.5:7b ~4.7 ГБ^)...
+    "%OLLAMA_EXE%" list 2>nul | find /I "qwen2.5:7b" >nul || "%OLLAMA_EXE%" pull qwen2.5:7b
+    "%OLLAMA_EXE%" create vtx-protocol -f "%~dp0Modelfile"
   )
 )
-REM Альтернативы (если не хотите локально): задайте свой ключ —
-REM   set GROQ_API_KEY=...        (бесплатно, console.groq.com)
-REM   set ANTHROPIC_API_KEY=...   (платно, console.anthropic.com)
+REM Альтернативы (облако): set GROQ_API_KEY=...  /  set ANTHROPIC_API_KEY=...
 REM --------------------------------
 
 echo.
