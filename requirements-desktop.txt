@@ -1,0 +1,8 @@
+# Desktop build = web requirements + a native-window shell.
+-r requirements.txt
+
+# Native OS window (uses the built-in Edge WebView2 runtime on Windows).
+pywebview>=5.0
+
+# Packaging into a standalone .exe (only needed to BUILD the installer).
+pyinstaller>=6.6

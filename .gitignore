@@ -13,3 +13,9 @@ transcribe_video.py
 build_report_09_06.py
 # local experiment (separate Node-based report builder)
 report_build/
+# desktop build artifacts (PyInstaller / Inno Setup output)
+build/
+dist/
+*.spec.bak
+Output/
+VoiceTranscriber-Setup.exe
