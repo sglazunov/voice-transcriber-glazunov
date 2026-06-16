@@ -20,6 +20,52 @@ def _provider_list() -> list[dict]:
         for p in config.available_providers()
     ]
 
+
+def _ollama_label(name: str) -> str:
+    """Human label for one installed Ollama model (marks custom / default)."""
+    short = name.split(":")[0]
+    default_short = config.OLLAMA_MODEL.split(":")[0]
+    disp = name[:-7] if name.endswith(":latest") else name  # drop noisy :latest
+    tags = []
+    if short.startswith("vtx"):
+        tags.append("настроенная")           # our Modelfile-built model
+    if short == default_short:
+        tags.append("по умолчанию")
+    if not tags:
+        tags.append("базовая")
+    return f"Локально · {disp} ({', '.join(tags)})"
+
+
+def _engine_list() -> list[dict]:
+    """Engines for the UI picker: each installed Ollama model + cloud providers.
+
+    Ollama models are returned as value "ollama:<model>"; cloud providers as
+    their plain id. The tuned/default model is sorted first.
+    """
+    avail = config.available_providers()
+    engines: list[dict] = []
+    if "ollama" in avail:
+        models = llm.list_ollama_models()
+        default_short = config.OLLAMA_MODEL.split(":")[0]
+
+        def rank(m: str) -> tuple:
+            short = m.split(":")[0]
+            return (0 if short == default_short else
+                    1 if short.startswith("vtx") else 2, m)
+
+        if models:
+            for m in sorted(models, key=rank):
+                engines.append({"value": f"ollama:{m}", "label": _ollama_label(m)})
+        else:
+            # Ollama enabled but server down / no models yet — offer the default.
+            engines.append({"value": "ollama",
+                            "label": f"Локально · {config.OLLAMA_MODEL} (по умолчанию)"})
+    for p in avail:
+        if p == "ollama":
+            continue
+        engines.append({"value": p, "label": config.PROVIDER_LABELS.get(p, p)})
+    return engines
+
 app = FastAPI(title="Voice Transcriber", version="1.0")
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
@@ -101,6 +147,7 @@ def list_providers():
     avail = set(config.available_providers())
     return {
         "available": config.available_providers(),
+        "engines": _engine_list(),
         "providers": [
             {
                 "id": p,
