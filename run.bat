@@ -30,16 +30,24 @@ if "%VTX_OLLAMA%"=="" set VTX_OLLAMA=1
 REM Настроенная модель протокола — создаётся автоматически при первом запуске.
 if "%VTX_OLLAMA_MODEL%"=="" set VTX_OLLAMA_MODEL=vtx-protocol
 set "OLLAMA_EXE=%LOCALAPPDATA%\Programs\Ollama\ollama.exe"
-if exist "%OLLAMA_EXE%" (
-  REM Поднимаем сервер Ollama, если он ещё не запущен.
-  tasklist /FI "IMAGENAME eq ollama.exe" 2>nul | find /I "ollama.exe" >nul || ( echo  Запускаю Ollama... & start "" /B "%OLLAMA_EXE%" serve & timeout /t 3 >nul )
-  REM Первый запуск: создаём кастомную модель vtx-protocol из Modelfile (один раз).
-  "%OLLAMA_EXE%" list 2>nul | find /I "vtx-protocol" >nul || (
-    echo  Готовлю модель протокола "vtx-protocol" ^(один раз; при необходимости скачается qwen2.5:7b ~4.7 ГБ^)...
-    "%OLLAMA_EXE%" list 2>nul | find /I "qwen2.5:7b" >nul || "%OLLAMA_EXE%" pull qwen2.5:7b
-    "%OLLAMA_EXE%" create vtx-protocol -f "%~dp0Modelfile"
-  )
+if not exist "%OLLAMA_EXE%" goto :no_ollama
+REM Поднимаем сервер Ollama, если он ещё не запущен.
+tasklist /FI "IMAGENAME eq ollama.exe" 2>nul | find /I "ollama.exe" >nul || ( echo  Запускаю Ollama... & start "" /B "%OLLAMA_EXE%" serve & timeout /t 3 >nul )
+REM Первый запуск: создаём кастомную модель vtx-protocol из Modelfile (один раз).
+"%OLLAMA_EXE%" list 2>nul | find /I "vtx-protocol" >nul || (
+  echo  Готовлю модель протокола "vtx-protocol" ^(один раз; при необходимости скачается qwen2.5:7b ~4.7 ГБ^)...
+  "%OLLAMA_EXE%" list 2>nul | find /I "qwen2.5:7b" >nul || "%OLLAMA_EXE%" pull qwen2.5:7b
+  "%OLLAMA_EXE%" create vtx-protocol -f "%~dp0Modelfile"
 )
+goto :ollama_done
+:no_ollama
+echo.
+echo  [i] Ollama не установлена — она нужна для локального протокола (бесплатно, оффлайн).
+echo      Открываю страницу загрузки: https://ollama.com/download
+echo      Либо установите командой:  winget install Ollama.Ollama
+echo      После установки запустите run.bat снова. Распознавание речи работает и без неё.
+start "" https://ollama.com/download
+:ollama_done
 REM Альтернативы (облако): set GROQ_API_KEY=...  /  set ANTHROPIC_API_KEY=...
 REM --------------------------------
 

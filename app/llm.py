@@ -105,6 +105,28 @@ def list_ollama_models() -> list[str]:
         return []
 
 
+def ollama_status() -> str:
+    """Whether Ollama is usable here — for install guidance in the UI.
+
+    'running'   — server answers (ready to use)
+    'installed' — the CLI exists but the server isn't up yet
+    'missing'   — Ollama is not installed
+    """
+    try:
+        with urllib.request.urlopen(config.OLLAMA_URL.rstrip("/") + "/api/version",
+                                    timeout=2):
+            return "running"
+    except Exception:
+        pass
+    import os
+    import shutil
+    exe = os.path.join(os.environ.get("LOCALAPPDATA", ""),
+                       "Programs", "Ollama", "ollama.exe")
+    if os.path.exists(exe) or shutil.which("ollama"):
+        return "installed"
+    return "missing"
+
+
 class OllamaProvider:
     """Local Ollama server. Free, offline, no API key.
 

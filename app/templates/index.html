@@ -305,7 +305,21 @@ async function loadProviders(){
   const prev=sel.value;
   sel.innerHTML=engines.map(e=>`<option value="${esc(e.value)}">${esc(e.label)}</option>`).join("");
   if(prev&&engines.some(e=>e.value===prev))sel.value=prev;
-  $('noEngine').classList.toggle('hidden',engines.length>0);
+  const noEng=$('noEngine');
+  noEng.classList.toggle('hidden',engines.length>0);
+  if(!engines.length){
+    const url=data.ollama_install_url||"https://ollama.com/download";
+    const dl=`<a href="${url}" target="_blank" style="color:var(--accent);font-weight:600">скачать Ollama (бесплатно)</a>`;
+    if(data.ollama_status==="missing"){
+      noEng.innerHTML=`Локальный ИИ-движок <b>Ollama не установлен</b>. Установите его — ${dl} — `+
+        `и перезапустите приложение. Либо подключите облачный движок ключом ниже.`;
+    }else if(data.ollama_status==="installed"){
+      noEng.innerHTML=`<b>Ollama установлена, но не запущена.</b> Перезапустите через <code>run.bat</code> `+
+        `(он сам поднимет Ollama), либо запустите Ollama вручную. Либо подключите облачный движок ключом ниже.`;
+    }else{
+      noEng.innerHTML=`Нет доступного движка. Подключите облачный движок ключом ниже, либо установите `+dl+`.`;
+    }
+  }
 }
 async function loadDefaultPrompt(){
   try{const d=await(await fetch("/api/prompt/default")).json();
