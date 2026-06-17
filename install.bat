@@ -50,6 +50,18 @@ echo [4/5] Скачиваю модель распознавания "%VTX_MODEL%
 python -c "from faster_whisper import WhisperModel; WhisperModel('%VTX_MODEL%', device='cpu', compute_type='int8'); print('Модель готова')"
 if errorlevel 1 ( echo [!] Не удалось скачать модель & pause & exit /b 1 )
 
+echo [5/5] Локальный ИИ для протокола (Ollama)...
+set "OLLAMA_EXE=%LOCALAPPDATA%\Programs\Ollama\ollama.exe"
+if exist "%OLLAMA_EXE%" goto :ollama_ok
+echo     Устанавливаю Ollama...
+winget install --id Ollama.Ollama --accept-source-agreements --accept-package-agreements --silent
+if exist "%OLLAMA_EXE%" goto :ollama_ok
+echo     [i] Не удалось установить автоматически. Скачайте вручную:
+echo         https://ollama.com/download   (протокол можно строить и через облако по ключу)
+start "" https://ollama.com/download
+:ollama_ok
+echo     (Модель протокола создастся автоматически при первом запуске run.bat.)
+
 echo.
 echo ============================================
 echo   Готово! Запустите run.bat

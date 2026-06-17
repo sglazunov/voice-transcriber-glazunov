@@ -148,6 +148,8 @@ def list_providers():
     return {
         "available": config.available_providers(),
         "engines": _engine_list(),
+        "ollama_status": llm.ollama_status(),
+        "ollama_install_url": "https://ollama.com/download",
         "providers": [
             {
                 "id": p,
