@@ -2,15 +2,15 @@
 chcp 65001 >nul
 setlocal
 cd /d "%~dp0"
-title Voice Transcriber - установка
+title Voice Transcriber - install
 
 echo ============================================
-echo   Распознавание речи - установка (Windows)
+echo   Voice Transcriber - install (Windows)
 echo ============================================
 echo.
 
-REM ── Нужен именно Python 3.12: нативные пакеты (ctranslate2/onnxruntime)
-REM    поддерживают 3.12, но НЕ 3.14. Если его нет — предложим установить.
+REM Python 3.12 is required: native deps (ctranslate2/onnxruntime) support 3.12
+REM but NOT 3.14. If it's missing, offer to install it.
 set "PY312=py -3.12"
 py -3.12 --version >nul 2>nul
 if not errorlevel 1 goto py_ok
@@ -19,81 +19,82 @@ if exist "%PY312%" goto py_ok
 
 echo.
 echo ============================================================
-echo  [!] Для работы нужен Python 3.12.
-echo      Сейчас он не найден (или установлена другая версия —
-echo      например 3.14, которую движок распознавания не поддерживает).
+echo  [!] Python 3.12 is required.
+echo      It was not found (or a different version is installed,
+echo      e.g. 3.14, which the recognition engine does not support).
 echo ============================================================
-choice /C YN /N /M "Скачать и установить Python 3.12 автоматически? [Y - да / N - нет]: "
+choice /C YN /N /M "Download and install Python 3.12 automatically? [Y - yes / N - no]: "
 if not errorlevel 2 goto py_install
 echo.
-echo  Установка отменена. Python 3.12 можно поставить вручную:
+echo  Cancelled. You can install Python 3.12 manually:
 echo    https://www.python.org/downloads/release/python-3120/
-echo  При установке отметьте "Add Python to PATH", затем запустите install.bat снова.
+echo  Tick "Add Python to PATH", then run install.bat again.
 pause
 exit /b 1
 
 :py_install
 echo.
-echo  Устанавливаю Python 3.12...
+echo  Installing Python 3.12...
 where winget >nul 2>nul
 if not errorlevel 1 (
   winget install -e --id Python.Python.3.12 --accept-source-agreements --accept-package-agreements
 ) else (
-  echo  winget не найден - скачиваю установщик с python.org...
+  echo  winget not found - downloading the installer from python.org...
   curl -L -o "%TEMP%\python312-setup.exe" https://www.python.org/ftp/python/3.12.10/python-3.12.10-amd64.exe
   "%TEMP%\python312-setup.exe" /quiet InstallAllUsers=0 PrependPath=1 Include_launcher=1
 )
 
-REM Повторная проверка после установки
+REM Re-detect after install
 set "PY312=py -3.12"
 py -3.12 --version >nul 2>nul
 if not errorlevel 1 goto py_ok
 set "PY312=%LOCALAPPDATA%\Programs\Python\Python312\python.exe"
 if exist "%PY312%" goto py_ok
 echo.
-echo  [i] Python 3.12 установлен, но ещё не виден в этом окне (PATH обновится
-echo      только в новом окне). Закройте это окно и запустите install.bat ещё раз.
+echo  [i] Python 3.12 was installed but is not visible in this window yet
+echo      (PATH updates only in a new window). Close this window and run
+echo      install.bat again.
 pause
 exit /b 1
 
 :py_ok
 echo  Python 3.12: %PY312%
 
-echo [0/5] Проверяю Visual C++ Redistributable (нужен для onnxruntime)...
+echo [0/5] Checking Visual C++ Redistributable (needed by onnxruntime)...
 winget install --id Microsoft.VCRedist.2015+.x64 --accept-source-agreements --accept-package-agreements --silent >nul 2>nul
 
-echo [1/5] Создаю виртуальное окружение (Python 3.12)...
+echo [1/5] Creating virtual environment (Python 3.12)...
 %PY312% -m venv .venv
-if errorlevel 1 ( echo [!] Не удалось создать venv & pause & exit /b 1 )
+if errorlevel 1 ( echo [!] Failed to create venv & pause & exit /b 1 )
 
 call ".venv\Scripts\activate.bat"
 
-echo [2/5] Обновляю pip...
+echo [2/5] Upgrading pip...
 python -m pip install --upgrade pip wheel >nul
 
-echo [3/5] Устанавливаю зависимости (это может занять несколько минут)...
+echo [3/5] Installing dependencies (may take a few minutes)...
 pip install -r requirements.txt
-if errorlevel 1 ( echo [!] Ошибка установки зависимостей & pause & exit /b 1 )
+if errorlevel 1 ( echo [!] Failed to install dependencies & pause & exit /b 1 )
 
 if "%VTX_MODEL%"=="" set VTX_MODEL=small
-echo [4/5] Скачиваю модель распознавания "%VTX_MODEL%"...
-python -c "from faster_whisper import WhisperModel; WhisperModel('%VTX_MODEL%', device='cpu', compute_type='int8'); print('Модель готова')"
-if errorlevel 1 ( echo [!] Не удалось скачать модель & pause & exit /b 1 )
+echo [4/5] Downloading the recognition model "%VTX_MODEL%"...
+python -c "from faster_whisper import WhisperModel; WhisperModel('%VTX_MODEL%', device='cpu', compute_type='int8'); print('Model ready')"
+if errorlevel 1 ( echo [!] Failed to download the model & pause & exit /b 1 )
 
-echo [5/5] Локальный ИИ для протокола (Ollama)...
+echo [5/5] Local AI for the protocol (Ollama)...
 set "OLLAMA_EXE=%LOCALAPPDATA%\Programs\Ollama\ollama.exe"
 if exist "%OLLAMA_EXE%" goto :ollama_ok
-echo     Устанавливаю Ollama...
+echo     Installing Ollama...
 winget install --id Ollama.Ollama --accept-source-agreements --accept-package-agreements --silent
 if exist "%OLLAMA_EXE%" goto :ollama_ok
-echo     [i] Не удалось установить автоматически. Скачайте вручную:
-echo         https://ollama.com/download   (протокол можно строить и через облако по ключу)
+echo     [i] Could not install automatically. Download it manually:
+echo         https://ollama.com/download   (the protocol can also use a cloud key)
 start "" https://ollama.com/download
 :ollama_ok
-echo     (Модель протокола создастся автоматически при первом запуске run.bat.)
+echo     (The protocol model is created automatically on the first run.bat.)
 
 echo.
 echo ============================================
-echo   Готово! Запустите run.bat
+echo   Done! Now run run.bat
 echo ============================================
 pause
