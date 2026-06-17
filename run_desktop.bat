@@ -5,12 +5,12 @@ cd /d "%~dp0"
 title Voice Transcriber (Desktop)
 
 if not exist ".venv\Scripts\pythonw.exe" (
-  echo [!] Сначала запустите install.bat, затем:
+  echo [!] Run install.bat first, then:
   echo     .venv\Scripts\python -m pip install -r requirements-desktop.txt
   pause
   exit /b 1
 )
 
-REM Запуск как обычной программы — в отдельном окне, без консоли.
+REM Launch as a normal app - in its own window, no console.
 set PYTHONUTF8=1
 start "" ".venv\Scripts\pythonw.exe" desktop.py
