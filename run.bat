@@ -5,58 +5,58 @@ cd /d "%~dp0"
 title Voice Transcriber
 
 if not exist ".venv\Scripts\activate.bat" (
-  echo [!] Сначала запустите install.bat
+  echo [!] Run install.bat first.
   pause
   exit /b 1
 )
 
 call ".venv\Scripts\activate.bat"
 
-REM === Настройки под этот ПК (Ryzen 5 5500U, 12 потоков, 14 ГБ RAM) ===
+REM === Settings for this PC (Ryzen 5 5500U, 12 threads, 14 GB RAM) ===
 set PYTHONUTF8=1
-REM Модель Whisper: small уже скачана и грузится мгновенно. medium точнее, но
-REM её ~1.5 ГБ качаются с HuggingFace при первом запуске (может зависнуть на
-REM медленном интернете). Переключайтесь на medium только когда она скачается.
+REM Whisper model: "small" is already downloaded and loads instantly. "medium"
+REM is more accurate but its ~1.5 GB download from HuggingFace can stall on a
+REM slow connection. Switch to medium only after it has finished downloading.
 if "%VTX_MODEL%"=="" set VTX_MODEL=small
-REM Качество распознавания (beam search) — у CPU есть запас
+REM Recognition quality (beam search) - the CPU has headroom for it.
 if "%VTX_BEAM_SIZE%"=="" set VTX_BEAM_SIZE=5
-REM Физические ядра (6 у 5500U) — оптимум для движка, остальное оставляем ОС
+REM Physical cores (6 on the 5500U) - the sweet spot for the engine.
 if "%VTX_CPU_THREADS%"=="" set VTX_CPU_THREADS=6
-REM Диаризация (кто говорил): 1 чтобы включить (нужен HF_TOKEN и pyannote)
+REM Diarization (who spoke): set to 1 to enable (needs HF_TOKEN and pyannote).
 if "%VTX_DIARIZATION%"=="" set VTX_DIARIZATION=0
 
-REM === Протокол встречи: локальный ИИ через Ollama (бесплатно, оффлайн) ===
+REM === Meeting protocol: local AI via Ollama (free, offline) ===
 if "%VTX_OLLAMA%"=="" set VTX_OLLAMA=1
-REM Настроенная модель протокола — создаётся автоматически при первом запуске.
+REM Tuned protocol model - created automatically on first run.
 if "%VTX_OLLAMA_MODEL%"=="" set VTX_OLLAMA_MODEL=vtx-protocol
 set "OLLAMA_EXE=%LOCALAPPDATA%\Programs\Ollama\ollama.exe"
 if not exist "%OLLAMA_EXE%" goto :no_ollama
-REM Поднимаем сервер Ollama, если он ещё не запущен.
-tasklist /FI "IMAGENAME eq ollama.exe" 2>nul | find /I "ollama.exe" >nul || ( echo  Запускаю Ollama... & start "" /B "%OLLAMA_EXE%" serve & timeout /t 3 >nul )
-REM Первый запуск: создаём кастомную модель vtx-protocol из Modelfile (один раз).
+REM Start the Ollama server if it isn't running yet.
+tasklist /FI "IMAGENAME eq ollama.exe" 2>nul | find /I "ollama.exe" >nul || ( echo  Starting Ollama... & start "" /B "%OLLAMA_EXE%" serve & timeout /t 3 >nul )
+REM First run: create the custom vtx-protocol model from the Modelfile (once).
 "%OLLAMA_EXE%" list 2>nul | find /I "vtx-protocol" >nul || (
-  echo  Готовлю модель протокола "vtx-protocol" ^(один раз; при необходимости скачается qwen2.5:7b ~4.7 ГБ^)...
+  echo  Preparing protocol model "vtx-protocol" ^(one-time; may download qwen2.5:7b ~4.7 GB^)...
   "%OLLAMA_EXE%" list 2>nul | find /I "qwen2.5:7b" >nul || "%OLLAMA_EXE%" pull qwen2.5:7b
   "%OLLAMA_EXE%" create vtx-protocol -f "%~dp0Modelfile"
 )
 goto :ollama_done
 :no_ollama
 echo.
-echo  [i] Ollama не установлена — она нужна для локального протокола (бесплатно, оффлайн).
-echo      Открываю страницу загрузки: https://ollama.com/download
-echo      Либо установите командой:  winget install Ollama.Ollama
-echo      После установки запустите run.bat снова. Распознавание речи работает и без неё.
+echo  [i] Ollama is not installed - it powers the local (free, offline) protocol.
+echo      Opening the download page: https://ollama.com/download
+echo      Or install with:  winget install Ollama.Ollama
+echo      Re-run run.bat after installing. Speech recognition works without it.
 start "" https://ollama.com/download
 :ollama_done
-REM Альтернативы (облако): set GROQ_API_KEY=...  /  set ANTHROPIC_API_KEY=...
+REM Cloud alternatives: set GROQ_API_KEY=...  /  set ANTHROPIC_API_KEY=...
 REM --------------------------------
 
 echo.
-echo  Сервер запускается. Откройте в браузере:
+echo  Server is starting. Open in your browser:
 echo      http://localhost:8000
 echo.
-echo  Доступ с других устройств в той же сети: http://^<IP-этого-ПК^>:8000
-echo  Чтобы остановить сервер - закройте это окно или нажмите Ctrl+C.
+echo  From other devices on the same network: http://^<this-PC-IP^>:8000
+echo  To stop the server - close this window or press Ctrl+C.
 echo.
 
 start "" http://localhost:8000
