@@ -76,6 +76,22 @@ def generate_report(
 
     doc.add_paragraph()  # spacer
 
+    # ---- Участники ----------------------------------------------------------
+    participants = analysis.get("participants", [])
+    if participants:
+        doc.add_heading("Участники", level=1)
+        for pt in participants:
+            name = (pt.get("name") or "").strip() if isinstance(pt, dict) else str(pt).strip()
+            role = (pt.get("role") or "").strip() if isinstance(pt, dict) else ""
+            if not name:
+                continue
+            bp = doc.add_paragraph(style="List Bullet")
+            bp.add_run(name).bold = True
+            if role:
+                r = bp.add_run(f" — {role}")
+                r.italic = True
+                r.font.color.rgb = RGBColor(0x60, 0x60, 0x60)
+
     # ---- О чём шёл разговор -------------------------------------------------
     doc.add_heading("О чём шёл разговор", level=1)
     p = doc.add_paragraph(analysis.get("summary", ""))
