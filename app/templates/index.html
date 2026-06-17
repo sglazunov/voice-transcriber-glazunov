@@ -483,6 +483,14 @@ function renderAnalysis(job){
   } else if(a.summary){
     const prov=prettyProvider(a._provider);
     if(prov)html+=`<div class="muted" style="margin-bottom:8px">🤖 Движок: ${esc(prov)}</div>`;
+    if(a.participants&&a.participants.length){
+      const items=a.participants.map(p=>{
+        const n=(p&&typeof p==='object')?(p.name||''):String(p);
+        const r=(p&&typeof p==='object')?(p.role||''):'';
+        return `<li><b>${esc(n)}</b>${r?` — <i style="color:var(--muted)">${esc(r)}</i>`:''}</li>`;
+      }).join('');
+      html+=`<div class="analysis-section"><h3>Участники</h3><ul>${items}</ul></div>`;
+    }
     html+=`<div class="analysis-section"><h3>О чём шёл разговор</h3><p>${esc(a.summary)}</p></div>`;
 
     if(a.detailed&&a.detailed.length){
