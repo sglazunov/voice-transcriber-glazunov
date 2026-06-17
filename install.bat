@@ -9,31 +9,61 @@ echo   Распознавание речи - установка (Windows)
 echo ============================================
 echo.
 
-where py >nul 2>nul
-if errorlevel 1 (
-  echo [!] Python не найден.
-  echo     Установите Python 3.12 с https://www.python.org/downloads/
-  echo     ВАЖНО: при установке отметьте "Add Python to PATH".
-  pause
-  exit /b 1
+REM ── Нужен именно Python 3.12: нативные пакеты (ctranslate2/onnxruntime)
+REM    поддерживают 3.12, но НЕ 3.14. Если его нет — предложим установить.
+set "PY312=py -3.12"
+py -3.12 --version >nul 2>nul
+if not errorlevel 1 goto py_ok
+set "PY312=%LOCALAPPDATA%\Programs\Python\Python312\python.exe"
+if exist "%PY312%" goto py_ok
+
+echo.
+echo ============================================================
+echo  [!] Для работы нужен Python 3.12.
+echo      Сейчас он не найден (или установлена другая версия —
+echo      например 3.14, которую движок распознавания не поддерживает).
+echo ============================================================
+choice /C YN /N /M "Скачать и установить Python 3.12 автоматически? [Y - да / N - нет]: "
+if not errorlevel 2 goto py_install
+echo.
+echo  Установка отменена. Python 3.12 можно поставить вручную:
+echo    https://www.python.org/downloads/release/python-3120/
+echo  При установке отметьте "Add Python to PATH", затем запустите install.bat снова.
+pause
+exit /b 1
+
+:py_install
+echo.
+echo  Устанавливаю Python 3.12...
+where winget >nul 2>nul
+if not errorlevel 1 (
+  winget install -e --id Python.Python.3.12 --accept-source-agreements --accept-package-agreements
+) else (
+  echo  winget не найден - скачиваю установщик с python.org...
+  curl -L -o "%TEMP%\python312-setup.exe" https://www.python.org/ftp/python/3.12.10/python-3.12.10-amd64.exe
+  "%TEMP%\python312-setup.exe" /quiet InstallAllUsers=0 PrependPath=1 Include_launcher=1
 )
 
-REM Нативные пакеты (ctranslate2/onnxruntime) поддерживают Python 3.12,
-REM но НЕ 3.14. Требуем именно 3.12.
+REM Повторная проверка после установки
+set "PY312=py -3.12"
 py -3.12 --version >nul 2>nul
-if errorlevel 1 (
-  echo [!] Нужен Python 3.12. Установите его:
-  echo     winget install Python.Python.3.12
-  echo     (Python 3.14 не поддерживается движком распознавания.)
-  pause
-  exit /b 1
-)
+if not errorlevel 1 goto py_ok
+set "PY312=%LOCALAPPDATA%\Programs\Python\Python312\python.exe"
+if exist "%PY312%" goto py_ok
+echo.
+echo  [i] Python 3.12 установлен, но ещё не виден в этом окне (PATH обновится
+echo      только в новом окне). Закройте это окно и запустите install.bat ещё раз.
+pause
+exit /b 1
+
+:py_ok
+echo  Python 3.12: %PY312%
 
 echo [0/5] Проверяю Visual C++ Redistributable (нужен для onnxruntime)...
 winget install --id Microsoft.VCRedist.2015+.x64 --accept-source-agreements --accept-package-agreements --silent >nul 2>nul
 
 echo [1/5] Создаю виртуальное окружение (Python 3.12)...
-py -3.12 -m venv .venv
+%PY312% -m venv .venv
 if errorlevel 1 ( echo [!] Не удалось создать venv & pause & exit /b 1 )
 
 call ".venv\Scripts\activate.bat"
