@@ -209,11 +209,14 @@
         </select>
       </label>
       <label class="chk">
-        <input type="checkbox" id="diarize" {% if not diarization_enabled %}disabled{% endif %}>
-        Кто говорил {% if not diarization_enabled %}<span class="muted">(выключено)</span>{% endif %}
+        <input type="checkbox" id="diarize" onchange="onDiarizeToggle()">
+        Кто говорил (разбивка по спикерам)
       </label>
       <button class="go" id="go" disabled>Распознать</button>
     </div>
+    <div id="diarHints" class="hidden" style="margin-top:8px;background:#1c1208;
+         border:1px solid #4a3200;border-radius:10px;padding:10px 12px;
+         font-size:12px;color:var(--muted);line-height:1.5"></div>
 
     <details class="adv">
       <summary>🎯 Точность: имена и термины (необязательно)</summary>
@@ -238,6 +241,7 @@
       <span>Время: <b id="lelapsed">00:00</b></span>
       <span id="ldurwrap" class="hidden">Длительность: <b id="ldur">—</b></span>
       <span id="lspkwrap" class="hidden">Говорящих: <b id="lspk">—</b></span>
+      <span id="ldiarwarn" class="hidden" style="color:var(--warn)"></span>
     </div>
     <div class="bar"><i id="lbar"></i></div>
     <div class="live" id="live"><div class="empty">Ожидание текста…</div></div>
@@ -326,6 +330,25 @@ async function loadDefaultPrompt(){
     if(d.prompt)$("expertPrompt").value=d.prompt;}catch{}
 }
 function clearExpertPrompt(){$("expertPrompt").value="";}
+async function onDiarizeToggle(){
+  const box=$("diarHints");
+  if(!$("diarize").checked){box.classList.add("hidden");return;}
+  box.classList.remove("hidden");
+  box.innerHTML="Проверяю готовность диаризации…";
+  try{
+    const s=await(await fetch("/api/diarization/status")).json();
+    if(s.available){
+      box.innerHTML="✓ Диаризация готова — спикеры будут размечены. На CPU это "+
+        "ощутимо медленно (отдельный этап после распознавания).";
+    }else{
+      const items=(s.checks||[]).filter(c=>!c.ok)
+        .map(c=>`<li><b>${esc(c.name)}</b>: ${esc(c.hint)}</li>`).join("");
+      box.innerHTML="⚠ Для «кто говорил» не хватает:<ul style='margin:6px 0 0;padding-left:18px'>"+
+        items+"</ul><div style='margin-top:6px'>Можно оставить галочку: распознавание "+
+        "всё равно пройдёт, просто без разметки спикеров.</div>";
+    }
+  }catch{box.innerHTML="Не удалось проверить готовность диаризации.";}
+}
 function onApiProviderChange(){
   const p=$('apiProvider').value;
   const ph={anthropic:"sk-ant-...",groq:"gsk_...",gemini:"AIza... (Google AI Studio)",
@@ -559,6 +582,9 @@ async function updateLive(){
   $("lpct").textContent=pct+"%";$("lbar").style.width=pct+"%";
   if(job.duration){$("ldurwrap").classList.remove("hidden");$("ldur").textContent=human(job.duration);}
   if(job.speakers){$("lspkwrap").classList.remove("hidden");$("lspk").textContent=job.speakers;}
+  if(job.diarization_error){$("ldiarwarn").classList.remove("hidden");
+    $("ldiarwarn").textContent="⚠ Разбивка по спикерам не выполнена ("+String(job.diarization_error).split("\n").pop().slice(0,80)+")";}
+  else{$("ldiarwarn").classList.add("hidden");}
   // Indeterminate sweeping bar while the LLM is analysing/generating.
   const analyzing=job.status==="analyzing";
   $("lbar").parentElement.classList.toggle("indet",analyzing);

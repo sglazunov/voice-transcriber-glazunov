@@ -21,6 +21,40 @@ class DiarizationUnavailable(RuntimeError):
     pass
 
 
+def readiness() -> dict:
+    """Report whether diarization can run, with per-requirement hints.
+
+    Returns {"available": bool, "checks": [{"name", "ok", "hint"}]}.
+    Used by the UI to tell the user exactly what to set up.
+    """
+    checks = []
+
+    try:
+        import torch  # noqa: F401
+        checks.append({"name": "Пакет torch", "ok": True, "hint": ""})
+    except Exception:
+        checks.append({"name": "Пакет torch", "ok": False,
+                       "hint": "Установите: pip install torch (в окружении .venv)"})
+
+    try:
+        import pyannote.audio  # noqa: F401
+        checks.append({"name": "Пакет pyannote.audio", "ok": True, "hint": ""})
+    except Exception:
+        checks.append({"name": "Пакет pyannote.audio", "ok": False,
+                       "hint": "Установите: pip install pyannote.audio"})
+
+    if config.HF_TOKEN:
+        checks.append({"name": "Токен HuggingFace (HF_TOKEN)", "ok": True, "hint": ""})
+    else:
+        checks.append({"name": "Токен HuggingFace (HF_TOKEN)", "ok": False,
+                       "hint": "Получите токен на huggingface.co/settings/tokens, "
+                               "примите условия моделей pyannote/speaker-diarization-3.1 "
+                               "и pyannote/segmentation-3.0, затем задайте HF_TOKEN "
+                               "в run.bat и перезапустите."})
+
+    return {"available": all(c["ok"] for c in checks), "checks": checks}
+
+
 def _get_pipeline():
     global _pipeline
     if _pipeline is not None:

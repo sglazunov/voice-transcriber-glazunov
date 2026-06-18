@@ -56,6 +56,7 @@ class Job:
     error: Optional[str] = None
     duration: Optional[float] = None
     speakers: Optional[int] = None
+    diarization_error: Optional[str] = None  # why "who spoke" didn't run, if asked
     analysis: Optional[dict] = None        # structured analysis result (latest)
     analysis_error: Optional[str] = None   # error message if analysis failed
     docx_providers: list = field(default_factory=list)  # engines a Word doc exists for
@@ -363,6 +364,7 @@ class JobStore:
             )
 
             n_speakers = None
+            diar_err = None
             if job.diarize:
                 try:
                     from .diarize import diarize as run_diarize
@@ -370,7 +372,8 @@ class JobStore:
                     segments = run_diarize(wav, segments)
                     n_speakers = len({s.speaker for s in segments if s.speaker})
                 except Exception as e:  # diarization is best-effort
-                    meta["diarization_error"] = str(e)
+                    diar_err = str(e)
+                    meta["diarization_error"] = diar_err
 
             # Write all output formats to disk.
             txt_content = formats.to_txt(segments)
@@ -420,6 +423,7 @@ class JobStore:
                 finished_at=time.time(),
                 duration=meta.get("duration"),
                 speakers=n_speakers,
+                diarization_error=diar_err,
                 analysis=analysis_result,
                 analysis_error=analysis_err,
             )
