@@ -102,6 +102,7 @@ async def create_job(
     glossary: str = Form(""),
     instructions: str = Form(""),
     custom_prompt: str = Form(""),
+    capture_screen: bool = Form(False),
 ):
     ext = Path(file.filename or "").suffix.lower()
     if ext not in ALLOWED_EXT:
@@ -125,7 +126,8 @@ async def create_job(
                        initial_prompt=hint.strip(), glossary=glossary.strip(),
                        analyze=want_analyze, provider=provider,
                        analysis_instructions=instructions.strip(),
-                       analysis_prompt=custom_prompt.strip())
+                       analysis_prompt=custom_prompt.strip(),
+                       capture_screen=capture_screen)
     return JSONResponse({"job_id": job.id, **job.to_public()}, status_code=201)
 
 
@@ -270,8 +272,8 @@ def get_result(job_id: str, format: str = "txt", provider: str = ""):
     job = store.get(job_id)
     if not job:
         raise HTTPException(404, "Задача не найдена")
-    if format not in {"txt", "srt", "json", "docx"}:
-        raise HTTPException(400, "format должен быть txt | srt | json | docx")
+    if format not in {"txt", "srt", "json", "docx", "screen"}:
+        raise HTTPException(400, "format должен быть txt | srt | json | docx | screen")
 
     # Word protocol: one document per engine. Pick the requested provider, or
     # default to the most recently generated one.
@@ -291,12 +293,13 @@ def get_result(job_id: str, format: str = "txt", provider: str = ""):
     # Allow download whenever the file exists — covers finished jobs and the
     # partial transcript saved when a job is cancelled. Still-running jobs
     # simply have no file yet and fall through to 404 below.
-    path = store.result_path(job_id, format)
+    fmt_file = "screen.txt" if format == "screen" else format
+    path = store.result_path(job_id, fmt_file)
     if not path.exists():
         if job.status not in {STATUS_DONE, STATUS_CANCELLED}:
             raise HTTPException(409, f"Задача ещё не готова (статус: {job.status})")
         raise HTTPException(404, "Результат отсутствует")
-    if format == "txt":
+    if format in ("txt", "screen"):
         return PlainTextResponse(path.read_text(encoding="utf-8"))
     media = "application/json" if format == "json" else "text/plain"
     return FileResponse(path, media_type=media,
@@ -313,6 +316,13 @@ def _safe_stem(name: str | None) -> str:
 def diarization_status():
     """What's needed for speaker diarization (for the UI toggle hints)."""
     from .diarize import readiness
+    return readiness()
+
+
+@app.get("/api/screen/status")
+def screen_status():
+    """What's needed for on-screen text capture (OCR) — for the UI toggle hints."""
+    from .screen_ocr import readiness
     return readiness()
 
 

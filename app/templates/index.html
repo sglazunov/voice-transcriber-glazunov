@@ -212,9 +212,16 @@
         <input type="checkbox" id="diarize" onchange="onDiarizeToggle()">
         Кто говорил (разбивка по спикерам)
       </label>
+      <label class="chk">
+        <input type="checkbox" id="capture_screen" onchange="onScreenToggle()">
+        Фиксировать показ экрана (видео, OCR)
+      </label>
       <button class="go" id="go" disabled>Распознать</button>
     </div>
     <div id="diarHints" class="hidden" style="margin-top:8px;background:#1c1208;
+         border:1px solid #4a3200;border-radius:10px;padding:10px 12px;
+         font-size:12px;color:var(--muted);line-height:1.5"></div>
+    <div id="screenHints" class="hidden" style="margin-top:8px;background:#1c1208;
          border:1px solid #4a3200;border-radius:10px;padding:10px 12px;
          font-size:12px;color:var(--muted);line-height:1.5"></div>
 
@@ -242,6 +249,8 @@
       <span id="ldurwrap" class="hidden">Длительность: <b id="ldur">—</b></span>
       <span id="lspkwrap" class="hidden">Говорящих: <b id="lspk">—</b></span>
       <span id="ldiarwarn" class="hidden" style="color:var(--warn)"></span>
+      <span id="lscreenwrap" class="hidden">С экрана: <b id="lscreen">—</b></span>
+      <span id="lscreenwarn" class="hidden" style="color:var(--warn)"></span>
     </div>
     <div class="bar"><i id="lbar"></i></div>
     <div class="live" id="live"><div class="empty">Ожидание текста…</div></div>
@@ -349,6 +358,25 @@ async function onDiarizeToggle(){
     }
   }catch{box.innerHTML="Не удалось проверить готовность диаризации.";}
 }
+async function onScreenToggle(){
+  const box=$("screenHints");
+  if(!$("capture_screen").checked){box.classList.add("hidden");return;}
+  box.classList.remove("hidden");
+  box.innerHTML="Проверяю готовность распознавания экрана…";
+  try{
+    const s=await(await fetch("/api/screen/status")).json();
+    if(s.available){
+      box.innerHTML="✓ Готово — текст со слайдов/экрана будет распознан и учтён в "+
+        "протоколе. Работает только для видео; на длинном видео занимает время.";
+    }else{
+      const items=(s.checks||[]).filter(c=>!c.ok)
+        .map(c=>`<li><b>${esc(c.name)}</b>: ${esc(c.hint)}</li>`).join("");
+      box.innerHTML="⚠ Для распознавания экрана не хватает:<ul style='margin:6px 0 0;padding-left:18px'>"+
+        items+"</ul><div style='margin-top:6px'>Можно оставить галочку: распознавание речи "+
+        "всё равно пройдёт, просто без текста с экрана.</div>";
+    }
+  }catch{box.innerHTML="Не удалось проверить готовность распознавания экрана.";}
+}
 function onApiProviderChange(){
   const p=$('apiProvider').value;
   const ph={anthropic:"sk-ant-...",groq:"gsk_...",gemini:"AIza... (Google AI Studio)",
@@ -432,6 +460,7 @@ $("go").onclick=()=>{
   fd.append("file",selected);
   fd.append("language",$("language").value);
   fd.append("diarize",$("diarize").checked?"true":"false");
+  fd.append("capture_screen",($("capture_screen")&&$("capture_screen").checked)?"true":"false");
   fd.append("analyze",curMode==='protocol'?"true":"false");
   fd.append("provider",($("provider")&&$("provider").value)||"auto");
   fd.append("hint",$("hint").value);
@@ -585,6 +614,11 @@ async function updateLive(){
   if(job.diarization_error){$("ldiarwarn").classList.remove("hidden");
     $("ldiarwarn").textContent="⚠ Разбивка по спикерам не выполнена ("+String(job.diarization_error).split("\n").pop().slice(0,80)+")";}
   else{$("ldiarwarn").classList.add("hidden");}
+  if(job.screen_segments){$("lscreenwrap").classList.remove("hidden");$("lscreen").textContent=job.screen_segments+" экранов";}
+  else{$("lscreenwrap").classList.add("hidden");}
+  if(job.screen_error){$("lscreenwarn").classList.remove("hidden");
+    $("lscreenwarn").textContent="⚠ Текст с экрана не распознан ("+String(job.screen_error).split("\n").pop().slice(0,80)+")";}
+  else{$("lscreenwarn").classList.add("hidden");}
   // Indeterminate sweeping bar while the LLM is analysing/generating.
   const analyzing=job.status==="analyzing";
   $("lbar").parentElement.classList.toggle("indet",analyzing);
@@ -644,6 +678,9 @@ async function updateLive(){
       <a class="dl" href="/api/jobs/${viewId}/result?format=txt" target="_blank">TXT</a>
       <a class="dl" href="/api/jobs/${viewId}/result?format=srt">SRT</a>
       <a class="dl" href="/api/jobs/${viewId}/result?format=json">JSON</a>`;
+    if(job.screen_segments){
+      tools+=`<a class="dl" href="/api/jobs/${viewId}/result?format=screen" target="_blank">📺 Текст с экрана</a>`;
+    }
     // One Word button per engine that produced a document (compare engines).
     (job.docx_providers||[]).forEach(p=>{
       tools+=`<a class="dl" href="/api/jobs/${viewId}/result?format=docx&provider=${encodeURIComponent(p)}"
