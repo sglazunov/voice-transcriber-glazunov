@@ -145,7 +145,7 @@ class OllamaProvider:
             "model": self.model,
             "prompt": prompt,
             "stream": bool(on_token),
-            "options": {"temperature": 0.2, "num_predict": max_tokens},
+            "options": {"temperature": 0.1, "num_predict": max_tokens},
         }
         if force_json:
             payload["format"] = "json"  # constrain output to valid JSON
@@ -193,7 +193,7 @@ class GroqProvider:
             "model": config.GROQ_MODEL,
             "messages": [{"role": "user", "content": prompt}],
             "max_tokens": max_tokens,
-            "temperature": 0.2,
+            "temperature": 0.1,
         }
         if force_json:
             payload["response_format"] = {"type": "json_object"}
@@ -221,6 +221,7 @@ class AnthropicProvider:
         message = client.messages.create(
             model=config.ANALYSIS_MODEL,
             max_tokens=max_tokens,
+            temperature=0.1,
             messages=[{"role": "user", "content": prompt}],
         )
         return message.content[0].text.strip()
@@ -236,7 +237,7 @@ class GeminiProvider:
         model = config.GEMINI_MODEL
         url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
                f"{model}:generateContent?key={config.GEMINI_API_KEY}")
-        gen = {"temperature": 0.2, "maxOutputTokens": max_tokens}
+        gen = {"temperature": 0.1, "maxOutputTokens": max_tokens}
         if force_json:
             gen["responseMimeType"] = "application/json"
         payload = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": gen}
@@ -257,7 +258,7 @@ class YandexProvider:
         url = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
         payload = {
             "modelUri": f"gpt://{config.YANDEX_FOLDER_ID}/{config.YANDEX_MODEL}",
-            "completionOptions": {"stream": False, "temperature": 0.2,
+            "completionOptions": {"stream": False, "temperature": 0.1,
                                   "maxTokens": str(max_tokens)},
             "messages": [{"role": "user", "text": prompt}],
         }
@@ -315,7 +316,7 @@ class GigaChatProvider:
         payload = {
             "model": config.GIGACHAT_MODEL,
             "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.2,
+            "temperature": 0.1,
             "max_tokens": max_tokens,
         }
         data = json.dumps(payload).encode("utf-8")
