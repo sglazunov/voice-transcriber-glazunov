@@ -21,12 +21,15 @@ from . import llm
 
 # Single-pass threshold. Above this we chunk (map-reduce) so the WHOLE meeting
 # is analysed, not just the first part.
-_MAX_CHARS = 18000
-# Size of each chunk when the transcript is too long for one pass.
-_CHUNK_CHARS = 14000
+_MAX_CHARS = 16000
+# Size of each chunk when the transcript is too long for one pass. Smaller
+# chunks = more thorough extraction (the model reads each part more carefully).
+_CHUNK_CHARS = 10000
+# Overlap between chunks so a topic split across a boundary isn't lost.
+_CHUNK_OVERLAP = 800
 # Cap the number of chunks so a huge file doesn't fan out into too many calls;
 # beyond this we grow the chunk size instead.
-_MAX_CHUNKS = 10
+_MAX_CHUNKS = 16
 
 # Shared description of the JSON shape we want back.
 _SCHEMA = (
@@ -49,6 +52,13 @@ _SCHEMA = (
 )
 
 _RULES = (
+    "ГЛАВНОЕ — ТОЧНОСТЬ И ПОЛНОТА. Опирайся СТРОГО на текст: ничего не выдумывай и "
+    "не додумывай. Пройди по ВСЕЙ встрече от начала до конца и не упусти ни одной "
+    "обсуждённой темы, договорённости или задачи. Сохраняй конкретику дословно: "
+    "имена, числа, проценты, сроки/даты, названия (модулей, тегов, систем, продуктов), "
+    "термины. Если что-то сказано неуверенно или неясно из расшифровки — так и помечай "
+    "(«предположительно», «не до конца ясно»), но не пропускай. Лучше подробнее, чем "
+    "короче — это рабочий протокол, по которому будут восстанавливать ход встречи.\n\n"
     "Правила:\n"
     "- participants: определи участников встречи и КТО ОНИ. Имена бери ТОЛЬКО из "
     "текста — по обращениям («Кирилл, …», «Наташа, …»), по самопредставлениям и "
@@ -62,12 +72,13 @@ _RULES = (
     "диаризация) — используй их и, где из разговора понятно настоящее имя, подписывай "
     "реальным именем (например: «Спикер 2 (Кирилл)»).\n"
     "- summary: 4-6 предложений, суть встречи в целом.\n"
-    "- detailed: МАКСИМАЛЬНО ПОДРОБНЫЙ разбор по темам — раздели разговор на 6-12 "
-    "тем/блоков. По каждой теме 4-8 предложений: что именно обсуждали, кто что "
+    "- detailed: МАКСИМАЛЬНО ПОДРОБНЫЙ разбор по темам — раздели разговор на столько тем, сколько их реально было (обычно 6-15)"
+    ". По каждой теме 5-10 предложений: что именно обсуждали, кто что"
     "предложил и кто возражал, аргументы обеих сторон, конкретные детали, цифры, "
     "примеры, к чему в итоге пришли. Это самая важная часть — пиши развёрнуто и "
-    "конкретно, не обобщай, ничего важного не упускай.\n"
-    "- key_thoughts: 8-14 ключевых тезисов.\n"
+    "конкретно, НЕ обобщай и НЕ сокращай, перенеси все содержательные моменты.\n"
+    "- key_thoughts: 8-15 ключевых тезисов и важных формулировок (по возможности — "
+    "с указанием, кто их высказал).\n"
     "- conclusions: ВЫВОДЫ и итоги — к чему в целом пришла команда, оценка статуса/"
     "ситуации, общие заключения (4-8 пунктов).\n"
     "- decisions: что именно решили/договорились (пустой список, если решений нет).\n"
@@ -106,15 +117,20 @@ _MAP_TEMPLATE = (
     "договорённости об именовании — названия тегов/кнопок/сущностей, кто кому даёт "
     "доступ/что-то скидывает, мелкие техдоделки). Для каждой задачи укажи "
     "ОТВЕТСТВЕННОГО, если в тексте сказано, кто её берёт/кому поручили.\n"
-    "Пиши списком, без вступления и заключения. Сохраняй конкретику и имена.\n\n"
+    "Выпиши ВСЁ существенное из этого фрагмента, ничего не пропускай. Сохраняй "
+    "дословно имена, числа, проценты, сроки/даты, названия и термины. Не выдумывай "
+    "того, чего нет в тексте. Пиши списком, без вступления и заключения.\n\n"
     "Фрагмент:\n{chunk}"
 )
 
 # Reduce step: merge all chunk notes into the final protocol JSON.
 _REDUCE_TEMPLATE = (
     "Ниже — заметки, собранные по последовательным частям одной рабочей встречи. "
-    "Объедини их в единый протокол, убери дубли, сохрани все детали и все задачи "
-    "(включая мелкие). Верни ответ ТОЛЬКО в виде JSON.\n\n"
+    "Объедини их в ЕДИНЫЙ ПОДРОБНЫЙ протокол: убери только дословные дубли, но "
+    "СОХРАНИ ВСЕ детали, темы, договорённости и задачи (включая мелкие) — НЕ "
+    "сокращай и не выбрасывай содержательные пункты, агрегируй без потери смысла. "
+    "Объединяй сведения об участниках и ответственных из разных частей. "
+    "Верни ответ ТОЛЬКО в виде JSON.\n\n"
     "Заметки по частям:\n{notes}\n\n"
     "Формат ответа:\n" + _SCHEMA + "\n\n" + _RULES
 )
@@ -146,7 +162,7 @@ def _extract_json(raw: str) -> dict:
 
 
 def _split_chunks(text: str) -> list[str]:
-    """Split transcript into line-aligned chunks (keeps segments intact)."""
+    """Split transcript into line-aligned chunks with overlap (segments intact)."""
     size = _CHUNK_CHARS
     # Grow chunk size if we'd otherwise exceed the chunk cap.
     if len(text) > size * _MAX_CHUNKS:
@@ -157,7 +173,16 @@ def _split_chunks(text: str) -> list[str]:
     for line in text.splitlines(keepends=True):
         if cur_len + len(line) > size and cur:
             chunks.append("".join(cur))
-            cur, cur_len = [], 0
+            # Carry the trailing ~_CHUNK_OVERLAP chars into the next chunk so a
+            # topic spanning the boundary survives in both.
+            ov: list[str] = []
+            ov_len = 0
+            for prev in reversed(cur):
+                if ov_len + len(prev) > _CHUNK_OVERLAP:
+                    break
+                ov.insert(0, prev)
+                ov_len += len(prev)
+            cur, cur_len = ov[:], ov_len
         cur.append(line)
         cur_len += len(line)
     if cur:
@@ -214,14 +239,14 @@ def analyze_transcript(transcript_text: str, provider: str | None = None,
         else:
             prompt = _PROMPT_TEMPLATE.format(transcript=text)
         raw = _stream_complete(backend, _with_extra(prompt, extra_instructions),
-                               6000, on_progress, "Генерация протокола…")
+                               8000, on_progress, "Генерация протокола…")
     else:
         chunks = _split_chunks(text)
         notes_parts = []
         for i, chunk in enumerate(chunks, 1):
             note = _stream_complete(
                 backend, _MAP_TEMPLATE.format(i=i, n=len(chunks), chunk=chunk),
-                1800, on_progress, f"Читаю встречу: часть {i} из {len(chunks)}…",
+                2600, on_progress, f"Читаю встречу: часть {i} из {len(chunks)}…",
                 force_json=False)
             notes_parts.append(f"=== Часть {i} ===\n{note.strip()}")
             # Free cloud tiers rate-limit easily; pace the chunk calls a bit.
@@ -234,7 +259,7 @@ def analyze_transcript(transcript_text: str, provider: str | None = None,
         else:
             prompt = _REDUCE_TEMPLATE.format(notes=notes)
         raw = _stream_complete(backend, _with_extra(prompt, extra_instructions),
-                               6000, on_progress, "Свожу протокол…")
+                               8000, on_progress, "Свожу протокол…")
 
     result = _extract_json(raw)
 
