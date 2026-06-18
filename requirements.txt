@@ -19,6 +19,12 @@ setuptools<80
 # Word document generation (protocol export)
 python-docx>=1.1
 
+# Screen-text capture from video (OCR of slides/code/docs shown on screen).
+# Python side; ALSO needs the external Tesseract binary + the 'rus' language
+# data: winget install UB-Mannheim.TesseractOCR  (then it offers Russian).
+Pillow>=10
+pytesseract>=0.3.10
+
 # AI analysis via Claude API (requires ANTHROPIC_API_KEY env var)
 anthropic>=0.40
 

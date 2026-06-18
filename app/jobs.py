@@ -48,6 +48,7 @@ class Job:
     provider: str = "auto"         # LLM provider for the protocol
     analysis_instructions: str = ""  # user's custom prompt additions
     analysis_prompt: str = ""        # expert mode: full prompt override
+    capture_screen: bool = False     # OCR on-screen text from the video
     status: str = STATUS_QUEUED
     progress: float = 0.0          # 0..1
     created_at: float = field(default_factory=time.time)
@@ -57,6 +58,8 @@ class Job:
     duration: Optional[float] = None
     speakers: Optional[int] = None
     diarization_error: Optional[str] = None  # why "who spoke" didn't run, if asked
+    screen_error: Optional[str] = None       # why screen OCR didn't run, if asked
+    screen_segments: int = 0                 # number of on-screen text snapshots
     analysis: Optional[dict] = None        # structured analysis result (latest)
     analysis_error: Optional[str] = None   # error message if analysis failed
     docx_providers: list = field(default_factory=list)  # engines a Word doc exists for
@@ -119,7 +122,8 @@ class JobStore:
     def create(self, filename: str, audio_path: str, language: str, diarize: bool,
                initial_prompt: str = "", glossary: str = "",
                analyze: bool = False, provider: str = "auto",
-               analysis_instructions: str = "", analysis_prompt: str = "") -> Job:
+               analysis_instructions: str = "", analysis_prompt: str = "",
+               capture_screen: bool = False) -> Job:
         job = Job(
             id=uuid.uuid4().hex[:12],
             filename=filename,
@@ -132,6 +136,7 @@ class JobStore:
             provider=provider,
             analysis_instructions=analysis_instructions,
             analysis_prompt=analysis_prompt,
+            capture_screen=capture_screen,
         )
         with self._lock:
             self._jobs[job.id] = job
@@ -286,7 +291,7 @@ class JobStore:
                 self._save()
 
     def _delete_job_files(self, job: Job) -> None:
-        for fmt in ("txt", "srt", "json", "docx"):
+        for fmt in ("txt", "srt", "json", "docx", "screen.txt"):
             self.result_path(job.id, fmt).unlink(missing_ok=True)
         for p in config.RESULT_DIR.glob(f"{job.id}__*.docx"):  # per-engine docs
             p.unlink(missing_ok=True)
@@ -383,6 +388,28 @@ class JobStore:
             (self.result_path(job.id, "json")).write_text(
                 formats.to_json(segments, meta), encoding="utf-8")
 
+            # Optional: capture on-screen text from the video (OCR).
+            screen_block = ""
+            screen_err = None
+            screen_segs = 0
+            if job.capture_screen:
+                try:
+                    from . import screen_ocr
+                    if screen_ocr.is_video(job.audio_path):
+                        items = screen_ocr.extract_screen_text(job.audio_path)
+                        screen_block = screen_ocr.to_block(items)
+                        screen_segs = len(items)
+                        if screen_block:
+                            self.result_path(job.id, "screen.txt").write_text(
+                                screen_block, encoding="utf-8")
+                    else:
+                        screen_err = "Файл не является видео — нечего распознавать с экрана."
+                except Exception as e:
+                    screen_err = str(e)
+
+            # Text fed to the protocol analysis = speech + on-screen text.
+            analysis_input = txt_content + (("\n\n" + screen_block) if screen_block else "")
+
             # AI analysis + Word document (optional, requires ANTHROPIC_API_KEY)
             analysis_result = None
             analysis_err = None
@@ -394,7 +421,7 @@ class JobStore:
                     from .docx_export import generate_report
 
                     analysis_result = analyze_transcript(
-                        txt_content, provider=job.provider,
+                        analysis_input, provider=job.provider,
                         extra_instructions=job.analysis_instructions,
                         custom_prompt=job.analysis_prompt,
                         on_progress=self._on_analysis(job.id))
@@ -424,6 +451,8 @@ class JobStore:
                 duration=meta.get("duration"),
                 speakers=n_speakers,
                 diarization_error=diar_err,
+                screen_error=screen_err,
+                screen_segments=screen_segs,
                 analysis=analysis_result,
                 analysis_error=analysis_err,
             )
