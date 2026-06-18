@@ -119,7 +119,7 @@ async def create_job(
                 raise HTTPException(413, f"Файл больше {config.MAX_UPLOAD_MB} МБ")
             out.write(chunk)
 
-    want_diar = diarize and config.DIARIZATION_ENABLED
+    want_diar = diarize  # honour the UI toggle; readiness is reported separately
     want_analyze = analyze and bool(config.available_providers())
     job = store.create(file.filename, str(dest), language, want_diar,
                        initial_prompt=hint.strip(), glossary=glossary.strip(),
@@ -307,6 +307,13 @@ def _safe_stem(name: str | None) -> str:
     stem = Path(name or "audio").stem
     keep = "".join(c if c.isalnum() or c in "-_ " else "_" for c in stem).strip()
     return (keep or "audio")[:80]
+
+
+@app.get("/api/diarization/status")
+def diarization_status():
+    """What's needed for speaker diarization (for the UI toggle hints)."""
+    from .diarize import readiness
+    return readiness()
 
 
 @app.get("/healthz")
