@@ -81,17 +81,9 @@ echo [4/5] Downloading the recognition model "%VTX_MODEL%"...
 python -c "from faster_whisper import WhisperModel; WhisperModel('%VTX_MODEL%', device='cpu', compute_type='int8'); print('Model ready')"
 if errorlevel 1 ( echo [!] Failed to download the model & pause & exit /b 1 )
 
-echo [5/5] Local AI for the protocol (Ollama)...
-set "OLLAMA_EXE=%LOCALAPPDATA%\Programs\Ollama\ollama.exe"
-if exist "%OLLAMA_EXE%" goto :ollama_ok
-echo     Installing Ollama...
-winget install --id Ollama.Ollama --accept-source-agreements --accept-package-agreements --silent
-if exist "%OLLAMA_EXE%" goto :ollama_ok
-echo     [i] Could not install automatically. Download it manually:
-echo         https://ollama.com/download   (the protocol can also use a cloud key)
-start "" https://ollama.com/download
-:ollama_ok
-echo     (The protocol model is created automatically on the first run.bat.)
+echo [5/5] Local AI for the protocol (Ollama) - NOT installed here.
+echo     You choose in the app: install the local engine on demand, or use a
+echo     cloud engine by API key. (Recognition itself needs no AI engine.)
 
 echo.
 echo ============================================

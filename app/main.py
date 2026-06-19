@@ -326,6 +326,20 @@ def screen_status():
     return readiness()
 
 
+@app.get("/api/ollama/status")
+def ollama_status():
+    """Whether the local engine (Ollama) is installed/ready + install progress."""
+    from . import ollama_setup
+    return ollama_setup.status()
+
+
+@app.post("/api/ollama/install")
+def ollama_install():
+    """Download & install Ollama + the protocol model on demand (background)."""
+    from . import ollama_setup
+    return ollama_setup.install()
+
+
 @app.get("/healthz")
 def healthz():
     return {"ok": True, "model": config.MODEL, "diarization": config.DIARIZATION_ENABLED}

@@ -42,11 +42,9 @@ REM First run: create the custom vtx-protocol model from the Modelfile (once).
 goto :ollama_done
 :no_ollama
 echo.
-echo  [i] Ollama is not installed - it powers the local (free, offline) protocol.
-echo      Opening the download page: https://ollama.com/download
-echo      Or install with:  winget install Ollama.Ollama
-echo      Re-run run.bat after installing. Speech recognition works without it.
-start "" https://ollama.com/download
+echo  [i] Local engine (Ollama) is not installed - that's OK.
+echo      In the app (protocol mode) pick "local" to install it on demand,
+echo      or use a cloud engine by API key. Recognition works either way.
 :ollama_done
 REM Cloud alternatives: set GROQ_API_KEY=...  /  set ANTHROPIC_API_KEY=...
 REM --------------------------------
