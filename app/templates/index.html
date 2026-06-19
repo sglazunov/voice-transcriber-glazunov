@@ -128,11 +128,24 @@
     <!-- Protocol engine + paid-API key panel (shown only in protocol mode) -->
     <div id="providerWrap" class="hidden" style="margin-top:12px">
       <label class="muted">Движок протокола
-        <select id="provider"></select>
+        <select id="provider" onchange="onEngineChange()"></select>
       </label>
       <div class="muted hidden" id="noEngine" style="margin-top:8px">
-        Нет подключённого движка. Подключите платный API ключом ниже
-        (или включите локальный Ollama в run.bat).
+        Нет подключённого движка. Выберите локальный (Ollama) и установите его,
+        либо подключите облачный API по ключу ниже.
+      </div>
+
+      <!-- On-demand local engine (Ollama) install prompt -->
+      <div id="ollamaSetup" class="hidden" style="margin-top:10px;background:#0d1c33;
+           border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:13px">
+        <div id="ollamaSetupText"></div>
+        <div class="row" id="ollamaSetupBtns" style="margin-top:10px">
+          <button class="go" type="button" onclick="installOllama()">Да, установить локально</button>
+          <button class="ghost" type="button" onclick="useApiInstead()">Нет, через API</button>
+        </div>
+        <div id="ollamaSetupProg" class="hidden" style="margin-top:10px">
+          <div class="muted" id="ollamaSetupMsg"><span class="spinner"></span>Устанавливаю…</div>
+        </div>
       </div>
 
       <details class="adv" id="apiKeyBox" style="margin-top:10px">
@@ -316,23 +329,16 @@ async function loadProviders(){
   }
   const sel=$('provider');
   const prev=sel.value;
+  // If no local Ollama model is ready, offer a "install local on demand" choice
+  // so the user can always pick local (it triggers the install prompt below).
+  const hasOllama=engines.some(e=>String(e.value).startsWith("ollama"));
+  if(!hasOllama){
+    engines=[{value:"ollama-setup",label:"💻 Локально (Ollama) — установить"}].concat(engines);
+  }
   sel.innerHTML=engines.map(e=>`<option value="${esc(e.value)}">${esc(e.label)}</option>`).join("");
   if(prev&&engines.some(e=>e.value===prev))sel.value=prev;
-  const noEng=$('noEngine');
-  noEng.classList.toggle('hidden',engines.length>0);
-  if(!engines.length){
-    const url=data.ollama_install_url||"https://ollama.com/download";
-    const dl=`<a href="${url}" target="_blank" style="color:var(--accent);font-weight:600">скачать Ollama (бесплатно)</a>`;
-    if(data.ollama_status==="missing"){
-      noEng.innerHTML=`Локальный ИИ-движок <b>Ollama не установлен</b>. Установите его — ${dl} — `+
-        `и перезапустите приложение. Либо подключите облачный движок ключом ниже.`;
-    }else if(data.ollama_status==="installed"){
-      noEng.innerHTML=`<b>Ollama установлена, но не запущена.</b> Перезапустите через <code>run.bat</code> `+
-        `(он сам поднимет Ollama), либо запустите Ollama вручную. Либо подключите облачный движок ключом ниже.`;
-    }else{
-      noEng.innerHTML=`Нет доступного движка. Подключите облачный движок ключом ниже, либо установите `+dl+`.`;
-    }
-  }
+  $('noEngine').classList.add('hidden');  // always ≥1 option (local-setup) + key panel below
+  onEngineChange();
 }
 async function loadDefaultPrompt(){
   try{const d=await(await fetch("/api/prompt/default")).json();
@@ -376,6 +382,60 @@ async function onScreenToggle(){
         "всё равно пройдёт, просто без текста с экрана.</div>";
     }
   }catch{box.innerHTML="Не удалось проверить готовность распознавания экрана.";}
+}
+
+/* ---------- local engine (Ollama) install on demand ---------- */
+async function onEngineChange(){
+  const sel=$("provider"), box=$("ollamaSetup");
+  if(!sel||!box){return;}
+  if(sel.value!=="ollama-setup"){box.classList.add("hidden");return;}
+  try{
+    const s=await(await fetch("/api/ollama/status")).json();
+    if(s.ready){box.classList.add("hidden");await loadProviders();return;}
+    box.classList.remove("hidden");
+    $("ollamaSetupBtns").classList.remove("hidden");
+    $("ollamaSetupProg").classList.add("hidden");
+    if(!s.installed){
+      $("ollamaSetupText").innerHTML="Для локальной генерации протокола нужна программа "+
+        "<b>Ollama</b> (бесплатно, оффлайн). Установить её сейчас? Скачается ~700 МБ "+
+        "программы и модель ~4.7 ГБ (один раз).";
+    }else{
+      $("ollamaSetupText").innerHTML="Ollama установлена, но не хватает модели протокола. "+
+        "Скачать и подготовить её сейчас? (~4.7 ГБ, один раз).";
+    }
+  }catch{box.classList.add("hidden");}
+}
+async function installOllama(){
+  $("ollamaSetupBtns").classList.add("hidden");
+  $("ollamaSetupProg").classList.remove("hidden");
+  $("ollamaSetupMsg").innerHTML='<span class="spinner"></span>Запуск установки…';
+  try{await fetch("/api/ollama/install",{method:"POST"});}catch{}
+  pollOllamaInstall();
+}
+function pollOllamaInstall(){
+  const tick=async()=>{
+    let s;
+    try{s=await(await fetch("/api/ollama/status")).json();}catch{setTimeout(tick,3000);return;}
+    const inst=s.install||{};
+    if(inst.state==="done"||s.ready){
+      $("ollamaSetupMsg").textContent="✓ Готово — локальный движок установлен.";
+      await loadProviders(); $("provider").value="ollama";
+      setTimeout(()=>$("ollamaSetup").classList.add("hidden"),2500);
+      return;
+    }
+    if(inst.state==="error"){
+      $("ollamaSetupMsg").textContent="⚠ "+(inst.message||"Ошибка установки");
+      $("ollamaSetupBtns").classList.remove("hidden");
+      return;
+    }
+    $("ollamaSetupMsg").innerHTML='<span class="spinner"></span>'+esc(inst.message||"Устанавливаю…");
+    setTimeout(tick,3000);
+  };
+  tick();
+}
+function useApiInstead(){
+  $("ollamaSetup").classList.add("hidden");
+  const box=$("apiKeyBox"); if(box) box.open=true;
 }
 function onApiProviderChange(){
   const p=$('apiProvider').value;
@@ -456,6 +516,11 @@ function pickFile(){
 /* ---------- upload (XHR for progress) ---------- */
 $("go").onclick=()=>{
   if(!selected)return;
+  if(curMode==='protocol'&&$("provider")&&$("provider").value==='ollama-setup'){
+    onEngineChange();  // show the install prompt
+    alert("Сначала установите локальный движок (кнопка «Да, установить локально») или выберите другой движок / подключите API.");
+    return;
+  }
   const fd=new FormData();
   fd.append("file",selected);
   fd.append("language",$("language").value);
