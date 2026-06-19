@@ -145,6 +145,8 @@
         </div>
         <div id="ollamaSetupProg" class="hidden" style="margin-top:10px">
           <div class="muted" id="ollamaSetupMsg"><span class="spinner"></span>Устанавливаю…</div>
+          <div class="bar hidden" id="ollamaSetupBarWrap" style="margin-top:6px">
+            <i id="ollamaSetupBar"></i></div>
         </div>
       </div>
 
@@ -429,7 +431,10 @@ function pollOllamaInstall(){
       return;
     }
     $("ollamaSetupMsg").innerHTML='<span class="spinner"></span>'+esc(inst.message||"Устанавливаю…");
-    setTimeout(tick,3000);
+    const w=$("ollamaSetupBarWrap");
+    if(typeof inst.percent==="number"){w.classList.remove("hidden");$("ollamaSetupBar").style.width=inst.percent+"%";}
+    else{w.classList.add("hidden");}
+    setTimeout(tick,2000);
   };
   tick();
 }

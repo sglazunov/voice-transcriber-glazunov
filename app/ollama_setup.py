@@ -18,8 +18,9 @@ from . import config
 
 _NOWINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
-# Install progress, polled by the UI.
-_install = {"state": "idle", "message": "", "ok": None}  # idle|running|done|error
+# Install progress, polled by the UI. `percent` is the model-download progress
+# (0-100) or None when not downloading.
+_install = {"state": "idle", "message": "", "ok": None, "percent": None}
 _lock = threading.Lock()
 
 
@@ -71,11 +72,40 @@ def _set(state: str, message: str, ok=None) -> None:
     _install.update(state=state, message=message, ok=ok)
 
 
+def _pull_api(name: str) -> None:
+    """Pull a model via Ollama's streaming API so we get %/GB progress."""
+    import json
+    url = config.OLLAMA_URL.rstrip("/") + "/api/pull"
+    body = json.dumps({"name": name, "stream": True}).encode("utf-8")
+    req = urllib.request.Request(url, data=body,
+                                 headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=600) as resp:
+        for raw in resp:  # newline-delimited JSON events
+            line = raw.decode("utf-8", "replace").strip()
+            if not line:
+                continue
+            try:
+                ev = json.loads(line)
+            except Exception:
+                continue
+            total, completed = ev.get("total"), ev.get("completed")
+            st = ev.get("status", "")
+            if total and completed:
+                pct = int(completed * 100 / total)
+                _install["percent"] = pct
+                _set("running", f"Скачивание модели qwen2.5:7b… {pct}% "
+                     f"({completed / 1e9:.1f}/{total / 1e9:.1f} ГБ)")
+            elif st:
+                _set("running", f"Модель: {st}")
+    _install["percent"] = None
+
+
 def install() -> dict:
     """Kick off install in the background (idempotent while running)."""
     with _lock:
         if _install["state"] == "running":
             return dict(_install)
+        _install["percent"] = None
         _set("running", "Подготовка…")
     threading.Thread(target=_do_install, daemon=True, name="vtx-ollama-install").start()
     return dict(_install)
@@ -114,7 +144,12 @@ def _do_install() -> None:
 
         if not _has_model("qwen2.5:7b") and not _has_model("vtx-protocol"):
             _set("running", "Скачивание модели qwen2.5:7b (~4.7 ГБ, один раз)…")
-            subprocess.run([exe, "pull", "qwen2.5:7b"], timeout=7200, creationflags=_NOWINDOW)
+            try:
+                _pull_api("qwen2.5:7b")  # streaming progress (%/GB)
+            except Exception:
+                # Fall back to the CLI if the streaming API isn't reachable.
+                subprocess.run([exe, "pull", "qwen2.5:7b"],
+                               timeout=7200, creationflags=_NOWINDOW)
 
         mf = _modelfile()
         if mf and not _has_model("vtx-protocol"):
