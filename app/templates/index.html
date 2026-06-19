@@ -147,6 +147,9 @@
           <div class="muted" id="ollamaSetupMsg"><span class="spinner"></span>Устанавливаю…</div>
           <div class="bar hidden" id="ollamaSetupBarWrap" style="margin-top:6px">
             <i id="ollamaSetupBar"></i></div>
+          <div style="margin-top:8px">
+            <button class="ghost" type="button" onclick="cancelOllamaInstall()">✖ Отменить установку</button>
+          </div>
         </div>
       </div>
 
@@ -427,6 +430,13 @@ function pollOllamaInstall(){
     }
     if(inst.state==="error"){
       $("ollamaSetupMsg").textContent="⚠ "+(inst.message||"Ошибка установки");
+      $("ollamaSetupProg").classList.add("hidden");
+      $("ollamaSetupBtns").classList.remove("hidden");
+      return;
+    }
+    if(inst.state==="cancelled"){
+      $("ollamaSetupMsg").textContent="⏹ "+(inst.message||"Установка отменена");
+      $("ollamaSetupProg").classList.add("hidden");
       $("ollamaSetupBtns").classList.remove("hidden");
       return;
     }
@@ -441,6 +451,10 @@ function pollOllamaInstall(){
 function useApiInstead(){
   $("ollamaSetup").classList.add("hidden");
   const box=$("apiKeyBox"); if(box) box.open=true;
+}
+async function cancelOllamaInstall(){
+  $("ollamaSetupMsg").innerHTML='<span class="spinner"></span>Отмена…';
+  try{await fetch("/api/ollama/install/cancel",{method:"POST"});}catch{}
 }
 function onApiProviderChange(){
   const p=$('apiProvider').value;

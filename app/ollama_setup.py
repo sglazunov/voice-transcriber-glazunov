@@ -22,6 +22,19 @@ _NOWINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 # (0-100) or None when not downloading.
 _install = {"state": "idle", "message": "", "ok": None, "percent": None}
 _lock = threading.Lock()
+_cancel = False
+
+
+class _InstallCancelled(Exception):
+    pass
+
+
+def cancel() -> dict:
+    """Request cancellation of an in-progress install."""
+    global _cancel
+    if _install["state"] == "running":
+        _cancel = True
+    return {"ok": True}
 
 
 def _exe() -> str | None:
@@ -88,6 +101,8 @@ def _pull_api(name: str) -> None:
                 ev = json.loads(line)
             except Exception:
                 continue
+            if _cancel:
+                raise _InstallCancelled()
             total, completed = ev.get("total"), ev.get("completed")
             st = ev.get("status", "")
             if total and completed:
@@ -102,9 +117,11 @@ def _pull_api(name: str) -> None:
 
 def install() -> dict:
     """Kick off install in the background (idempotent while running)."""
+    global _cancel
     with _lock:
         if _install["state"] == "running":
             return dict(_install)
+        _cancel = False
         _install["percent"] = None
         _set("running", "Подготовка…")
     threading.Thread(target=_do_install, daemon=True, name="vtx-ollama-install").start()
@@ -142,14 +159,22 @@ def _do_install() -> None:
                     break
                 time.sleep(1)
 
+        if _cancel:
+            raise _InstallCancelled()
+
         if not _has_model("qwen2.5:7b") and not _has_model("vtx-protocol"):
             _set("running", "Скачивание модели qwen2.5:7b (~4.7 ГБ, один раз)…")
             try:
                 _pull_api("qwen2.5:7b")  # streaming progress (%/GB)
+            except _InstallCancelled:
+                raise
             except Exception:
                 # Fall back to the CLI if the streaming API isn't reachable.
                 subprocess.run([exe, "pull", "qwen2.5:7b"],
                                timeout=7200, creationflags=_NOWINDOW)
+
+        if _cancel:
+            raise _InstallCancelled()
 
         mf = _modelfile()
         if mf and not _has_model("vtx-protocol"):
@@ -158,5 +183,9 @@ def _do_install() -> None:
                            timeout=900, creationflags=_NOWINDOW)
 
         _set("done", "Готово — локальный движок установлен и готов.", ok=True)
+    except _InstallCancelled:
+        _install["percent"] = None
+        _set("cancelled", "Установка отменена. Уже скачанная часть сохранена "
+             "— можно продолжить позже.", ok=False)
     except Exception as e:  # noqa: BLE001
         _set("error", f"Ошибка установки: {e}", ok=False)
