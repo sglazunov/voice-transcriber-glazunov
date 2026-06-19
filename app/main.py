@@ -340,6 +340,13 @@ def ollama_install():
     return ollama_setup.install()
 
 
+@app.post("/api/ollama/install/cancel")
+def ollama_install_cancel():
+    """Request cancellation of an in-progress Ollama install."""
+    from . import ollama_setup
+    return ollama_setup.cancel()
+
+
 @app.get("/healthz")
 def healthz():
     return {"ok": True, "model": config.MODEL, "diarization": config.DIARIZATION_ENABLED}
