@@ -509,12 +509,16 @@ async function connectKey(){
     }else{
       const detail=String(d.detail||"Ошибка");
       msg.innerHTML='<span style="color:#f87171">✗ '+esc(detail)+'</span>';
-      // YandexGPT: a wrong folder id error reveals the correct one — offer it.
+      // YandexGPT: turn common Cloud errors into actionable hints.
       if(provider==='yandex'){
         const m2=detail.match(/service account folder ID '([a-z0-9]+)'/i);
         if(m2 && m2[1] && m2[1]!==extra){
           msg.innerHTML+=`<div style="margin-top:6px"><button class="ghost" type="button"
             onclick="$('apiExtra').value='${m2[1]}';connectKey();">Подставить folder id: ${esc(m2[1])} и подключить</button></div>`;
+        }else if(/denied|Permission|Forbidden|403/i.test(detail)){
+          msg.innerHTML+=`<div style="margin-top:6px;color:var(--muted)">Похоже, у сервисного аккаунта нет прав.
+            В консоли Yandex Cloud назначьте этому аккаунту роль <code>ai.languageModels.user</code>
+            на каталоге, подождите ~минуту и повторите.</div>`;
         }
       }
     }
