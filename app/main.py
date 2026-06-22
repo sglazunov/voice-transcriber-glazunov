@@ -72,6 +72,9 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 ALLOWED_EXT = {".mp3", ".wav", ".m4a", ".ogg", ".oga", ".opus", ".flac", ".aac",
                ".mp4", ".mkv", ".webm", ".mov", ".wma", ".amr"}
 
+# Whisper models selectable per job (accuracy vs speed).
+ALLOWED_MODELS = ["tiny", "base", "small", "medium", "large-v3", "large-v3-turbo"]
+
 
 # ---- Web UI ---------------------------------------------------------------
 @app.get("/", response_class=HTMLResponse)
@@ -85,6 +88,7 @@ def index(request: Request):
             "analysis_enabled": bool(config.available_providers()),
             "providers": _provider_list(),
             "model": config.MODEL,
+            "models": ALLOWED_MODELS,
             "max_upload_mb": config.MAX_UPLOAD_MB,
         },
     )
@@ -95,6 +99,7 @@ def index(request: Request):
 async def create_job(
     file: UploadFile = File(...),
     language: str = Form(config.DEFAULT_LANGUAGE),
+    model: str = Form(""),
     diarize: bool = Form(False),
     analyze: bool = Form(False),
     provider: str = Form("auto"),
@@ -122,12 +127,13 @@ async def create_job(
 
     want_diar = diarize  # honour the UI toggle; readiness is reported separately
     want_analyze = analyze and bool(config.available_providers())
+    model_sel = model.strip() if model.strip() in ALLOWED_MODELS else ""
     job = store.create(file.filename, str(dest), language, want_diar,
                        initial_prompt=hint.strip(), glossary=glossary.strip(),
                        analyze=want_analyze, provider=provider,
                        analysis_instructions=instructions.strip(),
                        analysis_prompt=custom_prompt.strip(),
-                       capture_screen=capture_screen)
+                       capture_screen=capture_screen, model=model_sel)
     return JSONResponse({"job_id": job.id, **job.to_public()}, status_code=201)
 
 

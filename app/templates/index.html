@@ -226,6 +226,15 @@
           <option value="">Авто</option>
         </select>
       </label>
+      <label class="muted">Качество
+        <select id="model" title="Чем крупнее модель, тем чётче распознавание, но медленнее. large-v3 — максимум для русского.">
+          <option value="">По умолчанию ({{ model }})</option>
+          <option value="small">small — быстро</option>
+          <option value="medium">medium — точнее</option>
+          <option value="large-v3">large-v3 — максимум</option>
+          <option value="large-v3-turbo">large-v3-turbo — точно и быстрее</option>
+        </select>
+      </label>
       <label class="chk">
         <input type="checkbox" id="diarize" onchange="onDiarizeToggle()">
         Кто говорил (разбивка по спикерам)
@@ -556,6 +565,7 @@ $("go").onclick=()=>{
   const fd=new FormData();
   fd.append("file",selected);
   fd.append("language",$("language").value);
+  fd.append("model",($("model")&&$("model").value)||"");
   fd.append("diarize",$("diarize").checked?"true":"false");
   fd.append("capture_screen",($("capture_screen")&&$("capture_screen").checked)?"true":"false");
   fd.append("analyze",curMode==='protocol'?"true":"false");

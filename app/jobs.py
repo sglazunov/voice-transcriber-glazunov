@@ -42,6 +42,7 @@ class Job:
     audio_path: str
     language: str
     diarize: bool
+    model: str = ""                # Whisper model override (accuracy), "" = default
     initial_prompt: str = ""       # known names/terms to bias spelling
     glossary: str = ""             # "wrong=right" replacement rules
     analyze: bool = False          # generate AI protocol + Word doc
@@ -123,13 +124,14 @@ class JobStore:
                initial_prompt: str = "", glossary: str = "",
                analyze: bool = False, provider: str = "auto",
                analysis_instructions: str = "", analysis_prompt: str = "",
-               capture_screen: bool = False) -> Job:
+               capture_screen: bool = False, model: str = "") -> Job:
         job = Job(
             id=uuid.uuid4().hex[:12],
             filename=filename,
             audio_path=audio_path,
             language=language,
             diarize=diarize,
+            model=model,
             initial_prompt=initial_prompt,
             glossary=glossary,
             analyze=analyze,
@@ -366,6 +368,7 @@ class JobStore:
             segments, meta = transcribe_file(
                 job.audio_path, language=job.language, on_segment=on_segment,
                 on_start=on_start, initial_prompt=job.initial_prompt,
+                model_name=job.model or None,
             )
 
             n_speakers = None
