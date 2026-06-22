@@ -714,6 +714,13 @@ async function connectKey(){
             на каталоге, подождите ~минуту и повторите.</div>`;
         }
       }
+      if(provider==='gigachat' && /401|credentials|match db|doesn.?t match/i.test(detail)){
+        msg.innerHTML+=`<div style="margin-top:6px;color:var(--muted)">Проверьте, что вставлен именно
+          <b>Authorization key</b> (Ключ авторизации — длинная строка base64) из проекта GigaChat API на
+          <code>developers.sber.ru/studio</code>, а не Client ID и не Client Secret по отдельности.
+          Если ключ старый — сгенерируйте новый и скопируйте целиком. Для физлиц scope = <code>GIGACHAT_API_PERS</code>
+          (по умолчанию).</div>`;
+      }
     }
   }catch{msg.innerHTML='<span style="color:#f87171">✗ Сбой сети</span>';}
   $('connectKey').disabled=false;
@@ -983,6 +990,10 @@ async function updateLive(){
       tools+=`<button class="ghost" onclick="reanalyzeJob()"
                title="Сменить «Движок протокола» в списке выше и нажать — протокол пересоберётся другим движком и сохранится отдельно"
                >🔄 Перегенерировать (выбранным движком)</button>`;
+    }else{
+      tools+=`<button class="go" onclick="makeProtocol()"
+               title="Построить протокол встречи по уже распознанному тексту — без повторного распознавания"
+               >📄 Сделать протокол</button>`;
     }
     $("ltools").innerHTML=tools;
 
@@ -1042,6 +1053,19 @@ async function reanalyzeJob(){
 function cancelJob(){
   if(!confirm("Отменить распознавание? Процесс остановится, уже распознанная часть сохранится для скачивания.")) return;
   ctrlJob("cancel");
+}
+/* Build a protocol from an already-finished recognition-only job. */
+async function makeProtocol(){
+  if(curMode!=='protocol') setMode('protocol');
+  await loadProviders();
+  const v=$("provider")?$("provider").value:"";
+  if(!v || v==='ollama-setup'){
+    onEngineChange();  // shows the local-install prompt if "ollama-setup" is selected
+    window.scrollTo({top:0,behavior:"smooth"});
+    alert("Выберите движок протокола вверху (локальный Ollama — установите кнопкой, либо подключите API по ключу), затем снова нажмите «Сделать протокол».");
+    return;
+  }
+  reanalyzeJob();  // runs analysis on the stored transcript with the chosen engine
 }
 
 /* ---------- history table ---------- */
