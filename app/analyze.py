@@ -203,6 +203,10 @@ def _with_extra(prompt: str, extra: str) -> str:
             "их, но сохрани формат JSON и все поля):\n" + extra)
 
 
+class AnalysisCancelled(RuntimeError):
+    """Raised when the user cancels protocol generation mid-way."""
+
+
 def _stream_complete(backend, prompt, max_tokens, on_progress, stage, force_json=True):
     """Call backend.complete, streaming tokens to on_progress when supported.
 
@@ -219,7 +223,7 @@ def _stream_complete(backend, prompt, max_tokens, on_progress, stage, force_json
 
 def analyze_transcript(transcript_text: str, provider: str | None = None,
                        extra_instructions: str = "", custom_prompt: str = "",
-                       on_progress=None) -> dict:
+                       on_progress=None, cancel_check=None) -> dict:
     """Send the transcript to the chosen LLM provider and return structured analysis.
 
     `provider` is one of "ollama" | "groq" | "gemini" | "yandex" | "gigachat" |
@@ -237,6 +241,11 @@ def analyze_transcript(transcript_text: str, provider: str | None = None,
     text = (transcript_text or "").strip()
     custom = (custom_prompt or "").strip()
 
+    def _ck():
+        if cancel_check and cancel_check():
+            raise AnalysisCancelled()
+
+    _ck()
     if len(text) <= _MAX_CHARS:
         if custom:
             prompt = custom + "\n\nТранскрипция:\n" + text
@@ -248,6 +257,7 @@ def analyze_transcript(transcript_text: str, provider: str | None = None,
         chunks = _split_chunks(text)
         notes_parts = []
         for i, chunk in enumerate(chunks, 1):
+            _ck()  # cancel between chunks
             note = _stream_complete(
                 backend, _MAP_TEMPLATE.format(i=i, n=len(chunks), chunk=chunk),
                 2600, on_progress, f"Читаю встречу: часть {i} из {len(chunks)}…",
@@ -257,6 +267,7 @@ def analyze_transcript(transcript_text: str, provider: str | None = None,
             if backend.name == "groq" and i < len(chunks):
                 time.sleep(2)
         notes = "\n\n".join(notes_parts)
+        _ck()  # cancel before the final merge
         if custom:
             prompt = (custom + "\n\nНиже — заметки по последовательным частям "
                       "встречи; объедини их в итог по требованиям выше:\n" + notes)

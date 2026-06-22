@@ -967,7 +967,7 @@ async function updateLive(){
     }
     $("live").innerHTML=html;
     const gt=$("genText");if(gt)gt.scrollTop=gt.scrollHeight;
-    $("ltools").innerHTML="";
+    $("ltools").innerHTML=`<button class="ghost" onclick="cancelProtocol()">✖ Отменить сборку протокола</button>`;
 
   }else if(job.status==="done"){
     stopTimer();
@@ -1057,6 +1057,10 @@ async function reanalyzeJob(){
 }
 function cancelJob(){
   if(!confirm("Отменить распознавание? Процесс остановится, уже распознанная часть сохранится для скачивания.")) return;
+  ctrlJob("cancel");
+}
+function cancelProtocol(){
+  if(!confirm("Отменить сборку протокола? Распознанный текст уже сохранён — TXT/SRT/JSON останутся для скачивания.")) return;
   ctrlJob("cancel");
 }
 /* Build a protocol from an already-finished recognition-only job. */
