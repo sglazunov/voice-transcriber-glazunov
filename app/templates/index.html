@@ -386,11 +386,35 @@ async function onDiarizeToggle(){
     }else{
       const items=(s.checks||[]).filter(c=>!c.ok)
         .map(c=>`<li><b>${esc(c.name)}</b>: ${esc(c.hint)}</li>`).join("");
-      box.innerHTML="⚠ Для «кто говорил» не хватает:<ul style='margin:6px 0 0;padding-left:18px'>"+
-        items+"</ul><div style='margin-top:6px'>Можно оставить галочку: распознавание "+
-        "всё равно пройдёт, просто без разметки спикеров.</div>";
+      const needToken=(s.checks||[]).some(c=>!c.ok && /HuggingFace|HF_TOKEN/i.test(c.name));
+      let html="⚠ Для «кто говорил» не хватает:<ul style='margin:6px 0 0;padding-left:18px'>"+items+"</ul>";
+      if(needToken){
+        html+=`<div style="margin-top:8px">
+          <input id="hfToken" type="password" autocomplete="off" spellcheck="false" placeholder="HF-токен (hf_…)"
+                 style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--line);background:#0b1220;color:var(--txt)">
+          <div class="row" style="margin-top:6px"><button class="ghost" type="button" onclick="saveHfToken()">Сохранить токен</button>
+          <span class="muted" id="hfTokenMsg"></span></div>
+          <div class="muted" style="margin-top:4px">Токен — на huggingface.co/settings/tokens (тип Read),
+          прими условия моделей pyannote/speaker-diarization-3.1 и pyannote/segmentation-3.0.
+          Хранится в памяти; для постоянного — пропиши <b>HF_TOKEN</b> в run.bat.</div></div>`;
+      }
+      html+="<div style='margin-top:6px'>Можно оставить галочку: распознавание всё равно пройдёт, просто без разметки спикеров.</div>";
+      box.innerHTML=html;
     }
   }catch{box.innerHTML="Не удалось проверить готовность диаризации.";}
+}
+async function saveHfToken(){
+  const inp=$("hfToken"); if(!inp) return;
+  const t=inp.value.trim(), msg=$("hfTokenMsg");
+  if(!t){if(msg)msg.textContent="Введите токен";return;}
+  if(msg)msg.innerHTML='<span class="spinner"></span> сохраняю…';
+  try{
+    const r=await fetch("/api/diarization/token",{method:"POST",
+      headers:{"Content-Type":"application/json"},body:JSON.stringify({token:t})});
+    const s=await r.json();
+    if(r.ok){ onDiarizeToggle(); }            // re-check; token chip becomes OK
+    else if(msg){msg.textContent="✗ "+(s.detail||"Ошибка");}
+  }catch{ if(msg)msg.textContent="✗ Сбой сети"; }
 }
 async function onScreenToggle(){
   const box=$("screenHints");
