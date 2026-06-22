@@ -10,22 +10,29 @@ from faster_whisper import WhisperModel
 from . import config
 
 _model: Optional[WhisperModel] = None
+_model_name: Optional[str] = None
 _model_lock = threading.Lock()
 
 
-def get_model() -> WhisperModel:
-    """Lazily load the model once, guarded so two threads can't double-load it
-    (which would blow the RAM budget on a 4 GB box)."""
-    global _model
-    if _model is None:
+def get_model(name: Optional[str] = None) -> WhisperModel:
+    """Load the requested Whisper model, caching one at a time.
+
+    Jobs may pick accuracy (small/medium/large-v3) per run; since only one
+    transcription runs at a time, we keep a single model in memory and reload
+    it when the requested size changes — bounding RAM to one model.
+    """
+    global _model, _model_name
+    want = name or config.MODEL
+    if _model is None or _model_name != want:
         with _model_lock:
-            if _model is None:
+            if _model is None or _model_name != want:
                 _model = WhisperModel(
-                    config.MODEL,
+                    want,
                     device=config.DEVICE,
                     compute_type=config.COMPUTE_TYPE,
                     cpu_threads=config.CPU_THREADS,
                 )
+                _model_name = want
     return _model
 
 
@@ -46,6 +53,7 @@ def transcribe_file(
     on_segment: Optional[Callable[["Segment", float], None]] = None,
     on_start: Optional[Callable[[], None]] = None,
     initial_prompt: Optional[str] = None,
+    model_name: Optional[str] = None,
 ) -> tuple[List[Segment], dict]:
     """Transcribe an audio or video file.
 
@@ -59,13 +67,14 @@ def transcribe_file(
     produced (faster-whisper yields them lazily), so the UI can stream the
     growing transcript and show real progress.
     """
-    model = get_model()
+    model = get_model(model_name)
     segments_iter, info = model.transcribe(
         audio_path,
         language=language or config.DEFAULT_LANGUAGE,
         vad_filter=config.VAD_FILTER,
         beam_size=config.BEAM_SIZE,
         initial_prompt=initial_prompt or None,
+        condition_on_previous_text=True,
     )
 
     total = float(getattr(info, "duration", 0.0) or 0.0)
@@ -82,6 +91,6 @@ def transcribe_file(
         "language": getattr(info, "language", language),
         "language_probability": getattr(info, "language_probability", None),
         "duration": total,
-        "model": config.MODEL,
+        "model": model_name or config.MODEL,
     }
     return out, meta
