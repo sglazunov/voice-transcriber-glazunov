@@ -224,6 +224,26 @@
     .badge.running{background:linear-gradient(90deg,#0369a1,#0ea5e9)}
     .badge.analyzing{background:linear-gradient(90deg,#6d28d9,#a78bfa)}
     .badge.done{background:linear-gradient(90deg,#15803d,#22c55e)}
+
+    /* ============ dashboard: fit one screen, no page scroll (wide) ============ */
+    .dash{margin-top:6px}
+    @media (min-width:900px) and (min-height:560px){
+      html,body{height:100%;overflow:hidden}
+      .wrap{max-width:1280px;height:100vh;display:flex;flex-direction:column;
+            padding-top:16px;padding-bottom:14px}
+      h1{font-size:24px}
+      .dash{flex:1;min-height:0;display:grid;gap:18px;margin-top:10px;
+            grid-template-columns:minmax(360px,420px) 1fr}
+      .dcol{min-height:0;overflow-y:auto;padding-right:8px}
+      .dcol .card{margin-bottom:14px}
+      .dcol-right .card:last-child{margin-bottom:0}
+      /* let the live transcript use the column's height instead of a fixed cap */
+      #livecard .live{max-height:46vh}
+      /* slimmer column scrollbars */
+      .dcol::-webkit-scrollbar{width:8px}
+      .dcol::-webkit-scrollbar-thumb{background:rgba(125,160,210,.25);border-radius:8px}
+      .dcol::-webkit-scrollbar-track{background:transparent}
+    }
   </style>
 </head>
 <body>
@@ -231,6 +251,8 @@
   <h1><span class="emoji">🎙️</span><span class="grad">Распознавание речи</span></h1>
   <div class="sub">Модель <b>{{ model }}</b> · faster-whisper · аудио и видео · до {{ (max_upload_mb/1024)|round(1) }} ГБ</div>
 
+  <div class="dash">
+  <div class="dcol dcol-left">
   <!-- Upload card -->
   <div class="card">
     <h2>Новый файл</h2>
@@ -388,6 +410,8 @@
     </div>
   </div>
 
+  </div><!-- /dcol-left -->
+  <div class="dcol dcol-right">
   <!-- Active / selected job -->
   <div class="card hidden" id="livecard">
     <h2 id="livetitle">Распознавание</h2>
@@ -418,6 +442,8 @@
       <tbody id="jobs"></tbody>
     </table>
   </div>
+  </div><!-- /dcol-right -->
+  </div><!-- /dash -->
 </div>
 
 <script>
