@@ -117,6 +117,12 @@ def available_providers() -> list[str]:
     return [p for p in PROVIDER_ORDER if p in out]
 
 
+def set_hf_token(token: str) -> None:
+    """Set the HuggingFace token at runtime (for diarization). In-memory only."""
+    global HF_TOKEN
+    HF_TOKEN = token.strip()
+
+
 def set_provider_key(provider: str, key: str, extra: str = "") -> None:
     """Set an API key at runtime (from the UI). Kept in memory only — not
     written to disk, so it's gone on restart. Add it to run.bat to persist.

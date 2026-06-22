@@ -325,6 +325,21 @@ def diarization_status():
     return readiness()
 
 
+class HfToken(BaseModel):
+    token: str
+
+
+@app.post("/api/diarization/token")
+def diarization_token(body: HfToken):
+    """Set the HuggingFace token (for diarization) at runtime; report readiness."""
+    from .diarize import readiness
+    token = body.token.strip()
+    if not token:
+        raise HTTPException(400, "Введите токен")
+    config.set_hf_token(token)
+    return readiness()
+
+
 @app.get("/api/screen/status")
 def screen_status():
     """What's needed for on-screen text capture (OCR) — for the UI toggle hints."""
