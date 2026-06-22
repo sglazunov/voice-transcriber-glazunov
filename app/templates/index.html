@@ -930,8 +930,13 @@ async function updateLive(){
       const p=await(await fetch(`/api/jobs/${viewId}/partial`)).json();
       const segs=p.segments||[];
       if(!segs.length){
-        const msg=job.status==="paused"?"На паузе":
-                  (pct===0?"Загрузка модели…":"Анализ аудио, первые сегменты скоро появятся…");
+        let msg;
+        if(job.status==="paused"){msg="На паузе";}
+        else if(pct===0){
+          const big=/large|medium/.test(job.model||"");
+          msg="⏳ Загрузка модели"+(job.model?" «"+esc(job.model)+"»":"")+"…"+
+              (big?" При первом выборе модель скачивается (large-v3 ~3 ГБ) — это может занять несколько минут. Прогресс скачивания виден в окне run.bat. Потом она кэшируется и грузится мгновенно.":"");
+        }else{msg="Анализ аудио, первые сегменты скоро появятся…";}
         $("live").innerHTML=`<div class="empty">${msg}</div>`;
       }else{
         renderSegments($("live"),segs);
