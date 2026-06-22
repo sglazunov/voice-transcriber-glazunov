@@ -244,13 +244,15 @@ class JobStore:
         self._analysis[job.id] = {"stage": "Готовлю анализ…", "text": "", "chars": 0}
         self._set(job, status=STATUS_ANALYZING, analysis_error=None)
         try:
-            from .analyze import analyze_transcript
+            from .analyze import analyze_transcript, AnalysisCancelled
             from .docx_export import generate_report
 
-            result = analyze_transcript(txt, provider=job.provider,
-                                        extra_instructions=job.analysis_instructions,
-                                        custom_prompt=job.analysis_prompt,
-                                        on_progress=self._on_analysis(job.id))
+            result = analyze_transcript(
+                txt, provider=job.provider,
+                extra_instructions=job.analysis_instructions,
+                custom_prompt=job.analysis_prompt,
+                on_progress=self._on_analysis(job.id),
+                cancel_check=lambda: self._control.get(job.id, {}).get("cancel"))
             prov = result.get("_provider") or job.provider
             segs = []
             jp = self.result_path(job.id, "json")
@@ -268,6 +270,11 @@ class JobStore:
                 job.docx_providers.append(prov)
             self._set(job, status=STATUS_DONE, analysis=result,
                       analysis_error=None, docx_providers=job.docx_providers)
+        except AnalysisCancelled:
+            # Transcript stays intact; just drop back to a finished state.
+            self._control.pop(job.id, None)
+            self._set(job, status=STATUS_DONE,
+                      analysis_error="Сборка протокола отменена.")
         except Exception:
             self._set(job, status=STATUS_DONE,
                       analysis_error=traceback.format_exc(limit=3))
@@ -420,14 +427,15 @@ class JobStore:
                 self._analysis[job.id] = {"stage": "Готовлю анализ…", "text": "", "chars": 0}
                 self._set(job, status=STATUS_ANALYZING, persist=True)
                 try:
-                    from .analyze import analyze_transcript
+                    from .analyze import analyze_transcript, AnalysisCancelled
                     from .docx_export import generate_report
 
                     analysis_result = analyze_transcript(
                         analysis_input, provider=job.provider,
                         extra_instructions=job.analysis_instructions,
                         custom_prompt=job.analysis_prompt,
-                        on_progress=self._on_analysis(job.id))
+                        on_progress=self._on_analysis(job.id),
+                        cancel_check=lambda: self._control.get(job.id, {}).get("cancel"))
                     prov = analysis_result.get("_provider") or job.provider
                     segs_dicts = [
                         {"start": s.start, "end": s.end,
@@ -443,6 +451,11 @@ class JobStore:
                     )
                     if prov not in job.docx_providers:
                         job.docx_providers.append(prov)
+                except AnalysisCancelled:
+                    # Transcript (txt/srt/json) is already saved; just stop here.
+                    self._control.pop(job.id, None)
+                    self._set(job, status=STATUS_CANCELLED, finished_at=time.time())
+                    return
                 except Exception:
                     analysis_err = traceback.format_exc(limit=3)
 
