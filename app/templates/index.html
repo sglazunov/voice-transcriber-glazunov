@@ -227,12 +227,13 @@
         </select>
       </label>
       <label class="muted">Качество
-        <select id="model" title="Чем крупнее модель, тем чётче распознавание, но медленнее. large-v3 — максимум для русского.">
+        <select id="model" onchange="onModelChange()"
+                title="Чем крупнее модель, тем чётче распознавание, но медленнее и больше RAM. large-v3 — максимум для русского.">
           <option value="">По умолчанию ({{ model }})</option>
-          <option value="small">small — быстро</option>
-          <option value="medium">medium — точнее</option>
-          <option value="large-v3">large-v3 — максимум</option>
-          <option value="large-v3-turbo">large-v3-turbo — точно и быстрее</option>
+          <option value="small">small — быстро (~1 ГБ ОЗУ)</option>
+          <option value="medium">medium — точнее (~2 ГБ ОЗУ)</option>
+          <option value="large-v3">large-v3 — максимум (~3–4 ГБ ОЗУ)</option>
+          <option value="large-v3-turbo">large-v3-turbo — точно и быстрее (~2 ГБ ОЗУ)</option>
         </select>
       </label>
       <label class="chk">
@@ -245,6 +246,7 @@
       </label>
       <button class="go" id="go" disabled>Распознать</button>
     </div>
+    <div id="modelHint" class="muted" style="margin-top:6px;font-size:12px;line-height:1.5"></div>
     <div id="diarHints" class="hidden" style="margin-top:8px;background:#1c1208;
          border:1px solid #4a3200;border-radius:10px;padding:10px 12px;
          font-size:12px;color:var(--muted);line-height:1.5"></div>
@@ -359,6 +361,18 @@ async function loadDefaultPrompt(){
     if(d.prompt)$("expertPrompt").value=d.prompt;}catch{}
 }
 function clearExpertPrompt(){$("expertPrompt").value="";}
+const MODEL_INFO={
+  "":"Память ≈ размер выбранной модели. Длина записи на ОЗУ не влияет — только на время.",
+  "small":"💾 ≈1 ГБ ОЗУ · быстро · качество для русского среднее (может коверкать слова).",
+  "medium":"💾 ≈2 ГБ ОЗУ · средняя скорость · заметно чётче для русского.",
+  "large-v3":"💾 ≈3–4 ГБ ОЗУ · самое чёткое для русского, но медленно на CPU.",
+  "large-v3-turbo":"💾 ≈2 ГБ ОЗУ · почти как large-v3, но в разы быстрее — лучший баланс.",
+};
+function onModelChange(){
+  const el=$("modelHint"); if(!el) return;
+  const v=$("model")?$("model").value:"";
+  el.textContent=MODEL_INFO[v]||MODEL_INFO[""];
+}
 async function onDiarizeToggle(){
   const box=$("diarHints");
   if(!$("diarize").checked){box.classList.add("hidden");return;}
@@ -909,6 +923,7 @@ window.addEventListener("beforeunload",(e)=>{
 
 loadProviders();
 onApiProviderChange();
+onModelChange();
 refresh();
 setInterval(refresh,1500);
 </script>
