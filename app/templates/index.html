@@ -159,11 +159,76 @@
       .bar>i{animation:barflow 2.4s linear infinite}
       .livecard,.live{animation:fadeInUp .4s ease both}
     }
+
+    /* ============ richer "glass + aurora" theme ============ */
+    :root{--accent:#38bdf8;--accent2:#a78bfa;--accent3:#22d3ee;
+          --glass:rgba(20,30,52,.55);--glassline:rgba(125,160,210,.16)}
+    body{background:#070b16}
+    .wrap{max-width:980px}
+    @keyframes aurora{0%{transform:translate3d(-2%,-1%,0) rotate(0deg)}
+                      100%{transform:translate3d(3%,2%,0) rotate(5deg)}}
+    @media (prefers-reduced-motion:no-preference){
+      body::after{content:"";position:fixed;inset:-25%;z-index:-2;pointer-events:none;
+        background:
+         radial-gradient(40% 50% at 15% 18%, rgba(56,189,248,.20), transparent 60%),
+         radial-gradient(42% 55% at 86% 14%, rgba(167,139,250,.20), transparent 60%),
+         radial-gradient(48% 60% at 72% 92%, rgba(34,211,238,.15), transparent 60%);
+        filter:blur(28px);animation:aurora 24s ease-in-out infinite alternate}
+    }
+
+    /* gradient hero title */
+    h1{font-size:30px;font-weight:800;letter-spacing:-.4px;display:flex;align-items:center;gap:12px}
+    h1 .emoji{filter:drop-shadow(0 4px 14px rgba(56,189,248,.5))}
+    h1 .grad{background:linear-gradient(90deg,#e6edf6 8%,#7dd3fc 48%,#c4b5fd 92%);
+             -webkit-background-clip:text;background-clip:text;color:transparent}
+    .sub{font-size:13px}
+
+    /* glass cards */
+    .card{background:var(--glass);border:1px solid var(--glassline);border-radius:18px;
+          backdrop-filter:blur(16px) saturate(140%);-webkit-backdrop-filter:blur(16px) saturate(140%);
+          box-shadow:0 1px 0 rgba(255,255,255,.05) inset, 0 28px 64px -34px rgba(0,0,0,.85)}
+    .card h2{display:flex;align-items:center;gap:9px;font-size:16px}
+    .card h2::before{content:"";width:4px;height:17px;border-radius:3px;
+          background:linear-gradient(180deg,var(--accent),var(--accent2))}
+
+    /* segmented pill toggle */
+    .mode-toggle{background:rgba(10,16,30,.6);border:1px solid var(--glassline);
+          border-radius:14px;padding:4px;width:fit-content}
+    .mode-toggle button{border-radius:11px;padding:10px 20px;font-weight:600}
+    .mode-toggle button.active{background:linear-gradient(90deg,var(--accent),var(--accent2));
+          color:#07101e;box-shadow:0 10px 24px -10px rgba(99,102,241,.7)}
+
+    /* inputs */
+    select,textarea,input{background:rgba(8,14,28,.7);border-color:var(--glassline)}
+
+    /* primary button: tri-color sheen */
+    button.go{background:linear-gradient(90deg,var(--accent),var(--accent2),var(--accent3),var(--accent));
+          background-size:300% 100%;box-shadow:0 12px 28px -12px rgba(99,102,241,.65)}
+
+    /* glassy analysis cards with accented headers */
+    .analysis-section{background:rgba(15,24,48,.5);border:1px solid var(--glassline);border-radius:14px;
+          backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+    .analysis-section h3{display:flex;align-items:center;gap:8px;color:#a9cbff}
+    .analysis-section h3::before{content:"";width:6px;height:6px;border-radius:50%;
+          background:linear-gradient(90deg,var(--accent),var(--accent2));
+          box-shadow:0 0 10px 1px rgba(56,189,248,.6)}
+
+    /* live + generation panels a touch glassier */
+    .live,.gen-text{background:rgba(8,14,28,.6)}
+    /* prettier scrollbars */
+    .live::-webkit-scrollbar,.gen-text::-webkit-scrollbar,textarea::-webkit-scrollbar{width:10px;height:10px}
+    .live::-webkit-scrollbar-thumb,.gen-text::-webkit-scrollbar-thumb,textarea::-webkit-scrollbar-thumb{
+          background:linear-gradient(180deg,var(--accent),var(--accent2));border-radius:8px;
+          border:2px solid transparent;background-clip:content-box}
+    /* gradient badges */
+    .badge.running{background:linear-gradient(90deg,#0369a1,#0ea5e9)}
+    .badge.analyzing{background:linear-gradient(90deg,#6d28d9,#a78bfa)}
+    .badge.done{background:linear-gradient(90deg,#15803d,#22c55e)}
   </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>🎙️ Распознавание речи</h1>
+  <h1><span class="emoji">🎙️</span><span class="grad">Распознавание речи</span></h1>
   <div class="sub">Модель <b>{{ model }}</b> · faster-whisper · аудио и видео · до {{ (max_upload_mb/1024)|round(1) }} ГБ</div>
 
   <!-- Upload card -->
