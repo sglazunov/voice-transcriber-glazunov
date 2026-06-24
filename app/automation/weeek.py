@@ -178,21 +178,45 @@ def parse_start(task: dict, local_tz: tzinfo = timezone.utc) -> datetime | None:
     return None
 
 
+def _value_as_text(value: Any) -> str:
+    """Flatten a custom-field value (str / dict / list) to a searchable string."""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        # link-type fields may nest the URL under url/value/link
+        for k in ("url", "value", "link", "href"):
+            if isinstance(value.get(k), str):
+                return value[k]
+        return json.dumps(value, ensure_ascii=False)
+    if isinstance(value, (list, tuple)):
+        return " ".join(_value_as_text(v) for v in value)
+    return ""
+
+
 def _customfield_values(task: dict) -> list[str]:
-    """String values of a task's custom fields. In this workspace the Telemost
-    link is stored as a custom field of type 'link' (name «Встреча»)."""
-    out = []
+    """Searchable values of a task's custom fields, link-type fields first.
+
+    A task can have many custom fields (ответственный, документы, заметки …);
+    we return them all so the Telemost-specific regex can pick the right one,
+    but put `type: "link"` fields up front so a clean Telemost link wins over a
+    link that merely appears inside some free-text field."""
+    links, others = [], []
     for cf in task.get("customFields") or []:
-        if isinstance(cf, dict) and isinstance(cf.get("value"), str):
-            out.append(cf["value"])
-    return out
+        if not isinstance(cf, dict):
+            continue
+        text = _value_as_text(cf.get("value"))
+        if not text:
+            continue
+        (links if cf.get("type") == "link" else others).append(text)
+    return links + others
 
 
 def task_to_meeting(task: dict, local_tz: tzinfo = timezone.utc) -> Meeting | None:
     """Convert a raw task to a Meeting if it carries a Telemost link.
 
-    The link may live in a custom field (preferred), the description, or the
-    title — we check all of them."""
+    The link may live in a custom field (preferred — link-type fields first),
+    the description, or the title. The Telemost-specific regex ensures only a
+    telemost.yandex.ru URL is picked, ignoring any other links on the task."""
     url = extract_telemost(
         *_customfield_values(task),
         task.get("description"), task.get("title"), task.get("name"),
