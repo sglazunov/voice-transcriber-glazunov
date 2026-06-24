@@ -36,7 +36,7 @@ def record_meeting(url: str, out_path: str, cfg: dict,
     bot = browser.TelemostBot(cfg, on_log=log)
     rec = capture.FFmpegRecorder(out_path, cfg, on_log=log)
     try:
-        if not bot.join(url):
+        if not bot.join(url, should_stop=should_stop):
             shot = str(Path(out_path).with_suffix(".join-failed.png"))
             bot.screenshot(shot)
             return {"ok": False,

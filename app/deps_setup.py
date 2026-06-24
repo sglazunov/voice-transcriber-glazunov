@@ -137,8 +137,8 @@ def install(component: str) -> dict:
     return dict(_install[component])
 
 
-def _set(c: str, state: str, message: str, ok=None) -> None:
-    _install[c] = {"state": state, "message": message, "ok": ok}
+def _set(c: str, state: str, message: str, ok=None, percent=None) -> None:
+    _install[c] = {"state": state, "message": message, "ok": ok, "percent": percent}
 
 
 def _run(cmd: list[str], timeout: int) -> subprocess.CompletedProcess:
@@ -218,12 +218,18 @@ def _do_install(c: str) -> None:
             import tempfile
             import urllib.request
             import zipfile
-            _set(c, "running", "Скачивание VB-CABLE с vb-audio.com…")
+            _set(c, "running", "Скачивание VB-CABLE с vb-audio.com…", percent=0)
             tmp = tempfile.mkdtemp(prefix="vbcable_")
             zip_path = os.path.join(tmp, "vbcable.zip")
+
+            def _hook(block, bsize, total):
+                if total and total > 0:
+                    pct = min(int(block * bsize * 100 / total), 100)
+                    _set(c, "running", f"Скачивание VB-CABLE… {pct}%", percent=pct)
+
             urllib.request.urlretrieve(
                 "https://download.vb-audio.com/Download_CABLE/VBCABLE_Driver_Pack43.zip",
-                zip_path)
+                zip_path, reporthook=_hook)
             with zipfile.ZipFile(zip_path) as z:
                 z.extractall(tmp)
             setup = os.path.join(tmp, "VBCABLE_Setup_x64.exe")
