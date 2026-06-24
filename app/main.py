@@ -89,6 +89,12 @@ ALLOWED_MODELS = ["tiny", "base", "small", "medium", "large-v3", "large-v3-turbo
 
 
 # ---- Web UI ---------------------------------------------------------------
+@app.get("/automation", response_class=HTMLResponse)
+def automation_page(request: Request):
+    """Settings + control panel for the meeting-automation pipeline."""
+    return templates.TemplateResponse("automation.html", {"request": request})
+
+
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request):
     return templates.TemplateResponse(
