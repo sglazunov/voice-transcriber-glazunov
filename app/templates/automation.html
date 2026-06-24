@@ -327,7 +327,7 @@ async function recorderStatus(){
 }
 
 /* In-app installers for optional deps (install into the app's .venv). */
-const DEP_TARGETS=["playwright","ffmpeg"];
+const DEP_TARGETS=["playwright","ffmpeg","audio_loopback"];
 let _depPoll=null;
 async function renderDeps(){
   let st; try{ st=await api("GET","/api/setup/deps"); }catch{ return; }

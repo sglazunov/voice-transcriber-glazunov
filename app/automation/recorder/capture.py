@@ -92,9 +92,18 @@ def readiness(cfg: dict) -> dict:
     audio = (cfg.get("audio_device") or "").strip()
     if not audio:
         devices = list_audio_devices(ffmpeg)
-        hint = ("Выберите аудио-устройство (loopback/виртуальный кабель). "
-                f"Найдено: {devices}" if devices else
-                "Не задано аудио-устройство и не найдено ни одного dshow-устройства.")
+        keys = ("cable", "voicemeeter", "stereo mix", "стерео микшер",
+                "loopback", "what u hear", "what you hear")
+        has_loop = any(any(k in d.lower() for k in keys) for d in devices)
+        if has_loop:
+            hint = f"Выберите аудио-устройство из списка (есть подходящее). Найдено: {devices}"
+        elif devices:
+            hint = ("Нет виртуального аудио-устройства для записи звука встречи. "
+                    "Нажмите «Установить виртуальное аудио (VB-CABLE)» ниже, "
+                    f"либо выберите подходящее вручную. Найдено: {devices}")
+        else:
+            hint = ("Нет ни одного аудио-устройства для захвата. Нажмите "
+                    "«Установить виртуальное аудио (VB-CABLE)» ниже.")
         return {"ready": False, "detail": hint, "devices": devices}
     return {"ready": True, "detail": f"ffmpeg + аудио: {audio}"}
 
