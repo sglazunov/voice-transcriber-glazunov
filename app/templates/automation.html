@@ -5,27 +5,40 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Автоматизация встреч</title>
   <style>
-    :root{--bg:#0b1220;--card:#151f33;--card2:#0f1830;--accent:#38bdf8;--accent2:#22d3ee;
-          --txt:#e6edf6;--muted:#8aa0bd;--line:#26344f;--ok:#16a34a;--err:#dc2626;--warn:#d97706;}
+    :root{--bg:#0a0f1c;--card:rgba(28,40,66,.55);--card2:#0f1830;--accent:#5ec6ff;--accent2:#22d3ee;
+          --txt:#eaf1fb;--muted:#93a6c4;--line:rgba(120,150,200,.18);--ok:#16a34a;--err:#dc2626;--warn:#d97706;}
     *{box-sizing:border-box}
-    body{margin:0;background:linear-gradient(180deg,#0b1220,#0a1020);color:var(--txt);
-         font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-    .wrap{max-width:920px;margin:0 auto;padding:22px 16px 80px}
+    body{margin:0;color:var(--txt);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+         background:radial-gradient(1200px 600px at 15% -5%,rgba(56,189,248,.14),transparent 60%),
+                    radial-gradient(1000px 500px at 95% 0%,rgba(124,58,237,.12),transparent 55%),
+                    linear-gradient(180deg,#0a0f1c,#080c16)}
+    .wrap{max-width:1320px;margin:0 auto;padding:18px 18px 40px}
     a{color:var(--accent)}
-    h1{font-size:22px;margin:4px 0}
-    .sub{color:var(--muted);font-size:13px;margin-bottom:18px}
-    .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:18px}
-    .card h2{font-size:15px;margin:0 0 4px;font-weight:600}
-    .card .desc{color:var(--muted);font-size:12px;margin:0 0 14px}
-    label{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px}
+    h1{font-size:22px;margin:2px 0;letter-spacing:.2px}
+    .sub{color:var(--muted);font-size:13px;margin-bottom:14px}
+    /* two balanced columns so everything fits with minimal scroll */
+    .cards{column-count:2;column-gap:16px}
+    @media(max-width:1000px){.cards{column-count:1}}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:15px 16px;
+          margin:0 0 16px;break-inside:avoid;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
+          box-shadow:0 10px 30px -18px rgba(0,0,0,.7)}
+    .card h2{font-size:14px;margin:0 0 3px;font-weight:700;letter-spacing:.2px}
+    .card .desc{color:var(--muted);font-size:12px;margin:0 0 10px}
+    label{display:block;font-size:12px;color:var(--muted);margin:8px 0 3px}
     input[type=text],input[type=password],input[type=number],select{
       width:100%;padding:9px 10px;border-radius:10px;border:1px solid var(--line);
       background:#0b1220;color:var(--txt);font-size:13px;font-family:inherit}
     .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
     .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
     @media(max-width:640px){.grid2,.grid3{grid-template-columns:1fr}}
-    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:14px}
-    .chk{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--txt);margin-top:12px}
+    .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px}
+    .chk{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--txt);margin-top:9px}
+    .filterbox{border:1px dashed var(--line);border-radius:12px;padding:8px 12px;background:rgba(15,24,48,.4)}
+    .filterbox>summary{cursor:pointer;font-size:13px;color:var(--txt);user-select:none;font-weight:600}
+    .daysrow{display:flex;gap:4px;flex-wrap:wrap}
+    .daysrow label{display:inline-flex;align-items:center;gap:3px;margin:0;font-size:12px;color:var(--txt);
+                   background:#0b1220;border:1px solid var(--line);border-radius:8px;padding:4px 7px;cursor:pointer}
+    .daysrow input{width:auto;margin:0}
     button.go{background:linear-gradient(90deg,var(--accent),var(--accent2));color:#04212f;border:0;
               font-weight:700;padding:10px 18px;border-radius:11px;cursor:pointer;font-size:13px}
     button.ghost{background:#1b2740;color:var(--txt);border:1px solid var(--line);font-weight:600;
@@ -65,6 +78,7 @@
   <div class="sub">Weeek → запись Телемоста ботом → облако → распознавание и протокол.
     <a href="/">← к распознаванию</a></div>
 
+  <div class="cards">
   <!-- ============ WEEEK ============ -->
   <div class="card">
     <h2>1 · Weeek</h2>
@@ -192,6 +206,33 @@
     <div class="note">Запись и выгрузка в облако делаются всегда. Если выключить распознавание —
       будет только видеофайл в облаке. Протокол и текст с экрана требуют включённого распознавания.</div>
 
+    <details class="filterbox" style="margin-top:14px">
+      <summary>🎯 Какие встречи записывать <span class="muted">(по умолчанию — все)</span></summary>
+      <div class="grid3" style="margin-top:10px">
+        <div><label>Записывать с (время)</label><input id="rec_time_from" type="time"></div>
+        <div><label>…по (время)</label><input id="rec_time_to" type="time"></div>
+        <div><label>Дни недели</label>
+          <div class="daysrow">
+            <label><input type="checkbox" class="recday" value="0">Пн</label>
+            <label><input type="checkbox" class="recday" value="1">Вт</label>
+            <label><input type="checkbox" class="recday" value="2">Ср</label>
+            <label><input type="checkbox" class="recday" value="3">Чт</label>
+            <label><input type="checkbox" class="recday" value="4">Пт</label>
+            <label><input type="checkbox" class="recday" value="5">Сб</label>
+            <label><input type="checkbox" class="recday" value="6">Вс</label>
+          </div>
+        </div>
+      </div>
+      <div class="grid2" style="margin-top:10px">
+        <div><label>Только с этими словами в названии (через запятую)</label>
+          <input id="rec_include" type="text" placeholder="напр.: созвон, демо, ретро"></div>
+        <div><label>Не записывать с этими словами</label>
+          <input id="rec_exclude" type="text" placeholder="напр.: личное, 1:1"></div>
+      </div>
+      <div class="note">Пусто во всех полях = записывать все встречи. Иначе — только подходящие под условия
+        (удобно для регулярных встреч с одинаковым названием). Кнопкой «Записать сейчас» можно записать любую вручную.</div>
+    </details>
+
     <div class="grid3" style="margin-top:14px">
       <div><label>Опрос Weeek, сек.</label><input id="poll_interval_sec" type="number" min="30" value="120"></div>
       <div><label>Заходить за, мин. до старта</label><input id="lookahead_min" type="number" min="0" value="2"></div>
@@ -216,6 +257,7 @@
     <div id="sched_status" class="statusline"></div>
     <div id="sched_meetings" class="mlist"></div>
   </div>
+  </div><!-- /.cards -->
 </div>
 
 <div id="toast" class="toast"></div>
@@ -265,6 +307,10 @@ async function loadAll(){
   setChk("post_back_to_weeek", s.post_back_to_weeek);
   setChk("do_transcribe", s.do_transcribe); setChk("do_protocol", s.do_protocol);
   setChk("ocr_screen", s.ocr_screen); stageDeps();
+  // record filter
+  setVal("rec_time_from", s.rec_time_from); setVal("rec_time_to", s.rec_time_to);
+  setVal("rec_include", s.rec_include); setVal("rec_exclude", s.rec_exclude);
+  (s.rec_days||[]).forEach(d=>{const c=document.querySelector('.recday[value="'+d+'"]'); if(c)c.checked=true;});
   // set audio device after list loads
   cloudStatus(); recorderStatus(); refreshStatus(); loadAudioDevices(s.audio_device);
 }
@@ -401,7 +447,10 @@ async function saveScheduler(){
   const b={poll_interval_sec:+$("poll_interval_sec").value, lookahead_min:+$("lookahead_min").value,
     analyze_provider:$("analyze_provider").value, post_back_to_weeek:$("post_back_to_weeek").checked,
     do_transcribe:$("do_transcribe").checked, do_protocol:$("do_protocol").checked,
-    ocr_screen:$("ocr_screen").checked};
+    ocr_screen:$("ocr_screen").checked,
+    rec_time_from:$("rec_time_from").value||"", rec_time_to:$("rec_time_to").value||"",
+    rec_include:$("rec_include").value||"", rec_exclude:$("rec_exclude").value||"",
+    rec_days:[...document.querySelectorAll(".recday:checked")].map(c=>+c.value)};
   try{ await api("POST","/api/automation/settings", b); toast("Планировщик сохранён"); }
   catch(e){ toast(e.message,true); }
 }

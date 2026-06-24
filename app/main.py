@@ -456,6 +456,12 @@ class AutomationSettings(BaseModel):
     end_when_alone_sec: int | None = None
     min_participants: int | None = None
     max_meeting_min: int | None = None
+    # which meetings to auto-record (empty = all)
+    rec_time_from: str | None = None
+    rec_time_to: str | None = None
+    rec_days: list | None = None
+    rec_include: str | None = None
+    rec_exclude: str | None = None
 
 
 @app.post("/api/automation/settings")

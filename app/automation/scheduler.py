@@ -116,6 +116,33 @@ class Scheduler:
                 elif st.state == "scheduled":
                     st.url, st.title, st.start = m.url, m.title, m.start
 
+    @staticmethod
+    def _kw(raw) -> list[str]:
+        text = str(raw or "").replace("\n", ",")
+        return [w.strip().lower() for w in text.split(",") if w.strip()]
+
+    def _passes_filter(self, st: "MeetingState", cfg: dict) -> tuple[bool, str]:
+        """Apply the user's "which meetings to record" rules. Empty = record all."""
+        title = (st.title or "").lower()
+        exc = self._kw(cfg.get("rec_exclude"))
+        if exc and any(k in title for k in exc):
+            return False, "исключено по слову в названии"
+        inc = self._kw(cfg.get("rec_include"))
+        if inc and not any(k in title for k in inc):
+            return False, "название не содержит нужных слов"
+        if st.start is not None:
+            local = st.start.astimezone(self._tz(cfg))
+            days = cfg.get("rec_days") or []
+            if days and local.weekday() not in [int(d) for d in days]:
+                return False, "день недели не выбран"
+            frm = (cfg.get("rec_time_from") or "").strip()
+            to = (cfg.get("rec_time_to") or "").strip()
+            if frm or to:
+                hm = local.strftime("%H:%M")
+                if not ((frm or "00:00") <= hm <= (to or "23:59")):
+                    return False, f"время {hm} вне окна {frm or '00:00'}–{to or '23:59'}"
+        return True, ""
+
     def _maybe_trigger(self, cfg: dict) -> None:
         if self._recording.locked():
             return
@@ -131,6 +158,10 @@ class Scheduler:
                     continue  # not yet
                 if now > start + _LATE_GRACE_SEC:
                     st.state, st.detail = "missed", "Время начала прошло — пропущено."
+                    continue
+                ok, why = self._passes_filter(st, cfg)
+                if not ok:
+                    st.state, st.detail = "skipped", f"Не записываем: {why}."
                     continue
                 candidates.append((start, st))
         if candidates:
