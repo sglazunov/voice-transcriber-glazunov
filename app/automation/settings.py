@@ -26,6 +26,7 @@ _DEFAULTS: dict[str, Any] = {
     # --- Weeek task tracker ---
     "weeek_token": "",
     "weeek_project_id": None,         # optional: limit polling to one project
+    "timezone": "Europe/Moscow",      # workspace tz for naive Weeek date/times
     # --- where to put finished recordings ---
     "cloud": "local",                 # "local" | "gdrive" | "yandex_disk"
     "yandex_disk": {"token": "", "folder": "disk:/Телемост-записи"},

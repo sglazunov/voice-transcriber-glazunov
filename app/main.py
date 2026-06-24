@@ -381,6 +381,7 @@ def automation_settings():
 class AutomationSettings(BaseModel):
     weeek_token: str | None = None
     weeek_project_id: str | int | None = None
+    timezone: str | None = None
     cloud: str | None = None
     enabled: bool | None = None
     analyze_provider: str | None = None
@@ -403,12 +404,18 @@ def automation_save(body: AutomationSettings):
 def automation_meetings():
     """Upcoming meeting tasks from Weeek that carry a Telemost link."""
     from .automation import settings as auto_settings, weeek
+    from datetime import timezone
     cfg = auto_settings.load()
     token = cfg.get("weeek_token")
     if not token:
         raise HTTPException(400, "Сначала задайте токен Weeek в настройках.")
     try:
-        meetings = weeek.upcoming_meetings(token, cfg.get("weeek_project_id"))
+        from zoneinfo import ZoneInfo
+        tz = ZoneInfo(cfg.get("timezone") or "Europe/Moscow")
+    except Exception:
+        tz = timezone.utc
+    try:
+        meetings = weeek.upcoming_meetings(token, cfg.get("weeek_project_id"), tz)
     except weeek.WeeekError as e:
         raise HTTPException(502, str(e))
     return {"meetings": [

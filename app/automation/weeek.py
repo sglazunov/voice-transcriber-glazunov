@@ -17,18 +17,23 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timezone, tzinfo
 from typing import Any
 
 API_BASE = "https://api.weeek.net/public/v1"
 
-# Telemost links look like https://telemost.yandex.ru/j/1234567890123456
-_TELEMOST_RE = re.compile(r"https?://telemost\.yandex\.(?:ru|com)/\S+", re.IGNORECASE)
+# Telemost links look like https://telemost.yandex.ru/j/1234567890123456.
+# Stop at whitespace, quotes or angle brackets so we cleanly extract the URL even
+# when Weeek stores the description as HTML (e.g. <a href="...">текст</a>).
+_TELEMOST_RE = re.compile(
+    r"https?://telemost\.yandex\.(?:ru|com)/[^\s\"'<>)\]]+", re.IGNORECASE)
 
 # Candidate fields that may hold the meeting moment, richest first.
+# Confirmed against a real Weeek task: dueDate is ISO "YYYY-MM-DD", `date` is
+# localized "DD.MM.YYYY", and the time (when set) lives in `time`/`timeStart`.
 _DATETIME_FIELDS = ("dueDateTime", "startDateTime", "dateTime", "datetime")
-_DATE_FIELDS = ("dueDate", "startDate", "day", "date")
-_TIME_FIELDS = ("dueTime", "startTime", "time")
+_DATE_FIELDS = ("dueDate", "startDate", "date", "dateStart", "day")
+_TIME_FIELDS = ("time", "timeStart", "startTime", "dueTime")
 
 
 class WeeekError(RuntimeError):
@@ -129,23 +134,37 @@ def extract_telemost(*texts: str | None) -> str | None:
     return None
 
 
-def _parse_dt(value: Any) -> datetime | None:
+_STRPTIME_FORMATS = (
+    "%d.%m.%YT%H:%M:%S", "%d.%m.%YT%H:%M", "%d.%m.%Y",  # localized DD.MM.YYYY
+)
+
+
+def _parse_dt(value: Any, local_tz: tzinfo = timezone.utc) -> datetime | None:
+    """Parse a Weeek date/time string. Naive values (no offset) are treated as
+    `local_tz` — Weeek stores meeting times in the workspace's local zone."""
     if not value or not isinstance(value, str):
         return None
     s = value.strip().replace("Z", "+00:00")
-    for parser in (datetime.fromisoformat,):
+    try:
+        dt = datetime.fromisoformat(s)
+        return dt if dt.tzinfo else dt.replace(tzinfo=local_tz)
+    except ValueError:
+        pass
+    for fmt in _STRPTIME_FORMATS:
         try:
-            dt = parser(s)
-            return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+            return datetime.strptime(s, fmt).replace(tzinfo=local_tz)
         except ValueError:
             continue
     return None
 
 
-def parse_start(task: dict) -> datetime | None:
-    """Best-effort meeting start time from a task, tz-aware in UTC."""
+def parse_start(task: dict, local_tz: tzinfo = timezone.utc) -> datetime | None:
+    """Best-effort meeting start time from a task, tz-aware in UTC.
+
+    `local_tz` is the workspace timezone used for naive Weeek values (e.g.
+    Europe/Moscow). Returns None when no usable date is present."""
     for f in _DATETIME_FIELDS:
-        dt = _parse_dt(task.get(f))
+        dt = _parse_dt(task.get(f), local_tz)
         if dt:
             return dt.astimezone(timezone.utc)
     # date + optional time split across two fields
@@ -153,18 +172,30 @@ def parse_start(task: dict) -> datetime | None:
     if date_val:
         time_val = next((task.get(f) for f in _TIME_FIELDS if task.get(f)), None)
         combined = f"{date_val}T{time_val}" if time_val else str(date_val)
-        dt = _parse_dt(combined)
+        dt = _parse_dt(combined, local_tz)
         if dt:
             return dt.astimezone(timezone.utc)
     return None
 
 
-def task_to_meeting(task: dict) -> Meeting | None:
-    """Convert a raw task to a Meeting if it carries a Telemost link."""
+def _customfield_values(task: dict) -> list[str]:
+    """String values of a task's custom fields. In this workspace the Telemost
+    link is stored as a custom field of type 'link' (name «Встреча»)."""
+    out = []
+    for cf in task.get("customFields") or []:
+        if isinstance(cf, dict) and isinstance(cf.get("value"), str):
+            out.append(cf["value"])
+    return out
+
+
+def task_to_meeting(task: dict, local_tz: tzinfo = timezone.utc) -> Meeting | None:
+    """Convert a raw task to a Meeting if it carries a Telemost link.
+
+    The link may live in a custom field (preferred), the description, or the
+    title — we check all of them."""
     url = extract_telemost(
+        *_customfield_values(task),
         task.get("description"), task.get("title"), task.get("name"),
-        json.dumps(task.get("customFields"), ensure_ascii=False)
-        if task.get("customFields") else None,
     )
     if not url:
         return None
@@ -172,17 +203,18 @@ def task_to_meeting(task: dict) -> Meeting | None:
         task_id=task.get("id"),
         title=task.get("title") or task.get("name") or f"Задача {task.get('id')}",
         url=url,
-        start=parse_start(task),
+        start=parse_start(task, local_tz),
         project_id=task.get("projectId") or task.get("project_id"),
         raw=task,
     )
 
 
-def upcoming_meetings(token: str, project_id: Any = None) -> list[Meeting]:
+def upcoming_meetings(token: str, project_id: Any = None,
+                      local_tz: tzinfo = timezone.utc) -> list[Meeting]:
     """All tasks that have a Telemost link, as Meetings (start may be None)."""
     meetings = []
     for task in list_tasks(token, project_id=project_id):
-        m = task_to_meeting(task)
+        m = task_to_meeting(task, local_tz)
         if m:
             meetings.append(m)
     meetings.sort(key=lambda m: (m.start is None, m.start or datetime.max.replace(
