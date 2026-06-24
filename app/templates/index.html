@@ -534,7 +534,12 @@ async function onDiarizeToggle(){
       const items=(s.checks||[]).filter(c=>!c.ok)
         .map(c=>`<li><b>${esc(c.name)}</b>: ${esc(c.hint)}</li>`).join("");
       const needToken=(s.checks||[]).some(c=>!c.ok && /HuggingFace|HF_TOKEN/i.test(c.name));
+      const needPkgs=(s.checks||[]).some(c=>!c.ok && /torch|pyannote/i.test(c.name));
       let html="⚠ Для «кто говорил» не хватает:<ul style='margin:6px 0 0;padding-left:18px'>"+items+"</ul>";
+      if(needPkgs){
+        html+=`<div style="margin-top:8px"><button class="ghost" type="button" onclick="installDiar()">⤓ Установить torch + pyannote.audio (~2.5 ГБ, в .venv)</button>
+          <span class="muted" id="diarInstallMsg"></span></div>`;
+      }
       if(needToken){
         html+=`<div style="margin-top:8px">
           <input id="hfToken" type="password" autocomplete="off" spellcheck="false" placeholder="HF-токен (hf_…)"
@@ -563,6 +568,26 @@ async function saveHfToken(){
     else if(msg){msg.textContent="✗ "+(s.detail||"Ошибка");}
   }catch{ if(msg)msg.textContent="✗ Сбой сети"; }
 }
+/* Install torch + pyannote.audio into the app's .venv, with progress. */
+let _diarPoll=null;
+async function installDiar(){
+  try{ await fetch("/api/setup/deps/diarization/install",{method:"POST"}); }catch{}
+  pollDiar();
+}
+async function pollDiar(){
+  const msg=$("diarInstallMsg"); if(!msg) return;
+  let st; try{ st=await(await fetch("/api/setup/deps")).json(); }catch{ return; }
+  const ins=(st.diarization||{}).install||{};
+  if((st.diarization||{}).ready){
+    clearTimeout(_diarPoll);
+    msg.innerHTML='<span style="color:#22c55e">✓ установлено</span>';
+    onDiarizeToggle();                 // re-check; packages now OK
+    return;
+  }
+  if(ins.state==="error"){ msg.innerHTML='<span style="color:#f87171">'+esc(ins.message||"ошибка")+'</span>'; return; }
+  msg.innerHTML='<span class="spinner"></span> '+esc(ins.message||"устанавливаю…");
+  _diarPoll=setTimeout(pollDiar,2500);
+}
 async function onScreenToggle(){
   const box=$("screenHints");
   if(!$("capture_screen").checked){box.classList.add("hidden");return;}
@@ -577,10 +602,27 @@ async function onScreenToggle(){
       const items=(s.checks||[]).filter(c=>!c.ok)
         .map(c=>`<li><b>${esc(c.name)}</b>: ${esc(c.hint)}</li>`).join("");
       box.innerHTML="⚠ Для распознавания экрана не хватает:<ul style='margin:6px 0 0;padding-left:18px'>"+
-        items+"</ul><div style='margin-top:6px'>Можно оставить галочку: распознавание речи "+
+        items+"</ul>"+
+        `<div style="margin-top:8px"><button class="ghost" type="button" onclick="installOcr()">⤓ Установить OCR (Pillow + pytesseract + Tesseract)</button>
+          <span class="muted" id="ocrInstallMsg"></span></div>`+
+        "<div style='margin-top:6px'>Можно оставить галочку: распознавание речи "+
         "всё равно пройдёт, просто без текста с экрана.</div>";
     }
   }catch{box.innerHTML="Не удалось проверить готовность распознавания экрана.";}
+}
+let _ocrPoll=null;
+async function installOcr(){
+  try{ await fetch("/api/setup/deps/ocr/install",{method:"POST"}); }catch{}
+  pollOcr();
+}
+async function pollOcr(){
+  const msg=$("ocrInstallMsg"); if(!msg) return;
+  let st; try{ st=await(await fetch("/api/setup/deps")).json(); }catch{ return; }
+  const ins=(st.ocr||{}).install||{};
+  if((st.ocr||{}).ready){ clearTimeout(_ocrPoll); msg.innerHTML='<span style="color:#22c55e">✓ установлено</span>'; onScreenToggle(); return; }
+  if(ins.state==="error"){ msg.innerHTML='<span style="color:#f87171">'+esc(ins.message||"ошибка")+'</span>'; return; }
+  msg.innerHTML='<span class="spinner"></span> '+esc(ins.message||"устанавливаю…");
+  _ocrPoll=setTimeout(pollOcr,2500);
 }
 
 /* ---------- local engine (Ollama) install on demand ---------- */

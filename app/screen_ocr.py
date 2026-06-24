@@ -18,8 +18,26 @@ from typing import List
 VIDEO_EXTS = {".mp4", ".mkv", ".webm", ".mov", ".avi", ".m4v"}
 
 
+def _point_pytesseract_at_binary() -> None:
+    """If Tesseract isn't on PATH but was installed (e.g. via winget from the
+    UI), point pytesseract at the discovered binary so OCR works without a
+    process restart (the running server's PATH won't have picked it up)."""
+    try:
+        import shutil
+        if shutil.which("tesseract"):
+            return
+        import pytesseract
+        from .deps_setup import find_tesseract
+        exe = find_tesseract()
+        if exe:
+            pytesseract.pytesseract.tesseract_cmd = exe
+    except Exception:
+        pass
+
+
 def readiness() -> dict:
     """Report whether screen OCR can run, with per-requirement hints."""
+    _point_pytesseract_at_binary()
     checks = []
     try:
         import PIL  # noqa: F401
@@ -127,6 +145,7 @@ def extract_screen_text(path: str, lang: str = "rus+eng",
                         every_sec: float = 5.0, max_frames: int = 360) -> List[dict]:
     """Return [{time, text}] of de-duplicated on-screen text from the video."""
     import pytesseract
+    _point_pytesseract_at_binary()
 
     out: List[dict] = []
     prev = ""
