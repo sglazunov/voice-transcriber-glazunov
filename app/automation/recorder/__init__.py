@@ -50,7 +50,8 @@ def record_meeting(url: str, out_path: str, cfg: dict,
         reason = bot.wait_until_end(
             should_stop=should_stop,
             max_sec=int(cfg.get("max_meeting_min", 240)) * 60,
-            alone_sec=int(cfg.get("end_when_alone_sec", 90)))
+            alone_sec=int(cfg.get("end_when_alone_sec", 90)),
+            min_participants=int(cfg.get("min_participants", 1)))
         log(f"Останавливаю запись (причина: {reason}).")
         rec.stop()
 

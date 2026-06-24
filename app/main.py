@@ -413,6 +413,7 @@ class AutomationSettings(BaseModel):
     headless: bool | None = None
     join_timeout_sec: int | None = None
     end_when_alone_sec: int | None = None
+    min_participants: int | None = None
     max_meeting_min: int | None = None
 
 
@@ -495,6 +496,16 @@ def automation_scheduler_run_now(task_id: str):
     """Manually record a known meeting right now (poll Weeek first to populate)."""
     from .automation.scheduler import scheduler
     res = scheduler.run_now(task_id)
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("error"))
+    return res
+
+
+@app.post("/api/automation/scheduler/stop-recording")
+def automation_scheduler_stop_recording():
+    """Stop the recording in progress (e.g. the main meeting is over)."""
+    from .automation.scheduler import scheduler
+    res = scheduler.stop_recording()
     if not res.get("ok"):
         raise HTTPException(400, res.get("error"))
     return res

@@ -172,24 +172,35 @@ class TelemostBot:
         except Exception as e:
             self._on_log(f"Скриншот не удался: {e}")
 
-    def wait_until_end(self, should_stop, max_sec: int, alone_sec: int) -> str:
-        """Block until the meeting ends. Returns the reason it stopped."""
+    def wait_until_end(self, should_stop, max_sec: int, alone_sec: int,
+                       min_participants: int = 1) -> str:
+        """Block until the meeting ends. Returns the reason it stopped.
+
+        Stop conditions (first wins): manual stop (`should_stop`), hard time cap
+        (`max_sec`), the bot dropped out of the call, or the room thinned to
+        `min_participants` or fewer for `alone_sec` — but only AFTER real
+        participants were seen, so joining early (empty room) doesn't end it.
+        """
         start = time.time()
-        alone_since = None
+        thin_since = None
+        seen_others = False           # has anyone besides the bot ever appeared?
         while True:
             if should_stop and should_stop():
-                return "cancelled"
+                return "stopped"
             if time.time() - start > max_sec:
                 return "max_duration"
             if not self.is_in_call():
                 return "left_call"
             n = self.participant_count()
-            if n is not None and n <= 1:
-                alone_since = alone_since or time.time()
-                if time.time() - alone_since > alone_sec:
-                    return "alone"
-            else:
-                alone_since = None
+            if n is not None:
+                if n >= 2:
+                    seen_others = True
+                if seen_others and n <= max(1, min_participants):
+                    thin_since = thin_since or time.time()
+                    if time.time() - thin_since > alone_sec:
+                        return "thinned_out"
+                else:
+                    thin_since = None
             time.sleep(5)
 
     def close(self) -> None:

@@ -54,6 +54,7 @@ class Scheduler:
         self._recording = threading.Lock()
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
+        self._stop_recording = threading.Event()  # manual "stop current recording"
         self._last_poll = 0.0
 
     # -- lifecycle ----------------------------------------------------------
@@ -144,6 +145,7 @@ class Scheduler:
         try:
             from . import recorder
             cfg = auto_settings.load()
+            self._stop_recording.clear()  # fresh manual-stop flag per recording
 
             def log(msg: str) -> None:
                 st.logs.append(str(msg))
@@ -157,7 +159,9 @@ class Scheduler:
 
             res = recorder.record_meeting(
                 st.url, out, cfg, on_log=log,
-                should_stop=lambda: self._stop.is_set() or not auto_settings.get("enabled"))
+                should_stop=lambda: (self._stop.is_set()
+                                     or self._stop_recording.is_set()
+                                     or not auto_settings.get("enabled")))
             if not res.get("ok"):
                 self._set(st, "error", res.get("error") or "Запись не удалась.")
                 return
@@ -198,6 +202,13 @@ class Scheduler:
     def _set(self, st: MeetingState, state: str, detail: str) -> None:
         with self._lock:
             st.state, st.detail = state, detail
+
+    def stop_recording(self) -> dict:
+        """Manually stop the recording in progress (the main meeting is over)."""
+        if not self._recording.locked():
+            return {"ok": False, "error": "Сейчас запись не идёт."}
+        self._stop_recording.set()
+        return {"ok": True, "detail": "Останавливаю запись…"}
 
     def run_now(self, task_id: str) -> dict:
         """Manually trigger recording for a known meeting task (for testing)."""

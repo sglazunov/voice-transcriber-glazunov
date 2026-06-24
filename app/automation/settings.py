@@ -46,7 +46,9 @@ _DEFAULTS: dict[str, Any] = {
     "audio_device": "",               # Windows dshow audio device to capture (loopback/virtual cable)
     "capture_video": True,            # record the screen too (slides/screen-share)
     "join_timeout_sec": 60,           # how long to wait to get into the call
-    "end_when_alone_sec": 90,         # stop if the bot is the only one left this long
+    "end_when_alone_sec": 90,         # stop after the room sits at/below the threshold this long
+    "min_participants": 1,            # stop when total in room (incl. bot) drops to <= this
+                                      # 1 = stop only when everyone left; 3 = ignore a small lingering tail
     # --- after recording ---
     "analyze_provider": "auto",       # which LLM builds the protocol
     "post_back_to_weeek": True,       # attach protocol link as a task comment
