@@ -49,6 +49,12 @@ _DEFAULTS: dict[str, Any] = {
     "end_when_alone_sec": 90,         # stop after the room sits at/below the threshold this long
     "min_participants": 1,            # stop when total in room (incl. bot) drops to <= this
                                       # 1 = stop only when everyone left; 3 = ignore a small lingering tail
+    # --- which meetings to auto-record (all empty = record everything) ---
+    "rec_time_from": "",              # "HH:MM" local — record only meetings starting at/after
+    "rec_time_to": "",                # "HH:MM" local — ...and at/before this time
+    "rec_days": [],                   # weekday numbers 0=Mon..6=Sun; empty = any day
+    "rec_include": "",                # keywords (comma/line); if set, the title MUST contain one
+    "rec_exclude": "",                # keywords (comma/line); a title containing any is skipped
     # --- after recording: independently toggleable stages ---
     "do_transcribe": True,            # run speech recognition on the recording
     "do_protocol": True,              # build the Word protocol (needs do_transcribe)
