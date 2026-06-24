@@ -70,6 +70,17 @@ def _engine_list() -> list[dict]:
 app = FastAPI(title="Voice Transcriber", version="1.0")
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
+
+@app.on_event("startup")
+def _start_scheduler() -> None:
+    """Start the meeting-automation scheduler. It self-gates on the `enabled`
+    setting, so it's safe to always run — it idles until turned on in the UI."""
+    try:
+        from .automation.scheduler import scheduler
+        scheduler.start()
+    except Exception:
+        pass
+
 ALLOWED_EXT = {".mp3", ".wav", ".m4a", ".ogg", ".oga", ".opus", ".flac", ".aac",
                ".mp4", ".mkv", ".webm", ".mov", ".wma", ".amr"}
 
@@ -468,6 +479,24 @@ def automation_clouds_test(backend: str | None = None):
             pass
     if not res.get("ok"):
         raise HTTPException(502, res.get("error") or "Не удалось загрузить.")
+    return res
+
+
+@app.get("/api/automation/scheduler/status")
+def automation_scheduler_status():
+    """Scheduler state + the meetings it's tracking and their pipeline status."""
+    from .automation.scheduler import scheduler
+    scheduler.start()  # idempotent — ensures it's running even if startup was skipped
+    return scheduler.status()
+
+
+@app.post("/api/automation/scheduler/run-now")
+def automation_scheduler_run_now(task_id: str):
+    """Manually record a known meeting right now (poll Weeek first to populate)."""
+    from .automation.scheduler import scheduler
+    res = scheduler.run_now(task_id)
+    if not res.get("ok"):
+        raise HTTPException(400, res.get("error"))
     return res
 
 
