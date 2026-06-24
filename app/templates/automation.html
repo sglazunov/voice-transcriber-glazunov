@@ -173,7 +173,15 @@
     <p class="desc">Главный выключатель автоматики и её текущее состояние.</p>
     <div class="chk"><input id="enabled" type="checkbox" onchange="toggleEnabled()">
       <b>Включить автоматическую запись встреч</b></div>
-    <div class="grid3">
+
+    <p class="desc" style="margin-top:16px">Что делать после записи (независимо):</p>
+    <div class="chk"><input id="do_transcribe" type="checkbox" onchange="stageDeps()"> Распознать речь (транскрипция)</div>
+    <div class="chk"><input id="do_protocol" type="checkbox"> Собрать протокол встречи (Word)</div>
+    <div class="chk"><input id="ocr_screen" type="checkbox"> Распознать текст с экрана (слайды/код на видео)</div>
+    <div class="note">Запись и выгрузка в облако делаются всегда. Если выключить распознавание —
+      будет только видеофайл в облаке. Протокол и текст с экрана требуют включённого распознавания.</div>
+
+    <div class="grid3" style="margin-top:14px">
       <div><label>Опрос Weeek, сек.</label><input id="poll_interval_sec" type="number" min="30" value="120"></div>
       <div><label>Заходить за, мин. до старта</label><input id="lookahead_min" type="number" min="0" value="2"></div>
       <div><label>Движок протокола</label>
@@ -244,6 +252,8 @@ async function loadAll(){
   setChk("enabled", s.enabled); setVal("poll_interval_sec", s.poll_interval_sec);
   setVal("lookahead_min", s.lookahead_min); setVal("analyze_provider", s.analyze_provider||"auto");
   setChk("post_back_to_weeek", s.post_back_to_weeek);
+  setChk("do_transcribe", s.do_transcribe); setChk("do_protocol", s.do_protocol);
+  setChk("ocr_screen", s.ocr_screen); stageDeps();
   // set audio device after list loads
   cloudStatus(); recorderStatus(); refreshStatus(); loadAudioDevices(s.audio_device);
 }
@@ -340,9 +350,16 @@ async function testRecord(){
 }
 
 /* ---- Scheduler ---- */
+function stageDeps(){
+  // Protocol and screen-OCR only make sense when transcription is on.
+  const t=$("do_transcribe").checked;
+  for(const id of ["do_protocol","ocr_screen"]){ $(id).disabled=!t; if(!t) $(id).checked=false; }
+}
 async function saveScheduler(){
   const b={poll_interval_sec:+$("poll_interval_sec").value, lookahead_min:+$("lookahead_min").value,
-    analyze_provider:$("analyze_provider").value, post_back_to_weeek:$("post_back_to_weeek").checked};
+    analyze_provider:$("analyze_provider").value, post_back_to_weeek:$("post_back_to_weeek").checked,
+    do_transcribe:$("do_transcribe").checked, do_protocol:$("do_protocol").checked,
+    ocr_screen:$("ocr_screen").checked};
   try{ await api("POST","/api/automation/settings", b); toast("Планировщик сохранён"); }
   catch(e){ toast(e.message,true); }
 }
