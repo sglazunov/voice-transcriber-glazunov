@@ -26,13 +26,18 @@ import threading
 
 _NOWINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
-COMPONENTS = ("playwright", "diarization", "ffmpeg", "ocr")
+COMPONENTS = ("playwright", "diarization", "ffmpeg", "ocr", "audio_loopback")
 _LABELS = {
     "playwright": "Запись встреч (Playwright + Chromium)",
     "diarization": "«Кто говорил» (torch + pyannote.audio)",
     "ffmpeg": "ffmpeg (запись и конвертация видео/аудио)",
     "ocr": "Текст с экрана (Pillow + pytesseract + Tesseract)",
+    "audio_loopback": "Виртуальное аудио для записи звука (VB-CABLE)",
 }
+
+# Audio devices that let ffmpeg capture the meeting's sound (system loopback).
+_LOOPBACK_KEYS = ("cable", "voicemeeter", "stereo mix", "стерео микшер",
+                  "loopback", "what u hear", "what you hear")
 
 _install = {c: {"state": "idle", "message": "", "ok": None} for c in COMPONENTS}
 _lock = threading.Lock()
@@ -93,7 +98,21 @@ def component_ready(c: str) -> bool:
         return find_ffmpeg() is not None
     if c == "ocr":
         return _has("PIL") and _has("pytesseract") and find_tesseract() is not None
+    if c == "audio_loopback":
+        return _loopback_device_present()
     return False
+
+
+def _loopback_device_present() -> bool:
+    """True if ffmpeg can see a loopback/virtual audio device to capture sound."""
+    try:
+        from .automation.recorder import capture
+        from .automation import settings as auto_settings
+        ff = auto_settings.load().get("ffmpeg_path") or "ffmpeg"
+        names = capture.list_audio_devices(ff)
+        return any(any(k in n.lower() for k in _LOOPBACK_KEYS) for n in names)
+    except Exception:
+        return False
 
 
 def status() -> dict:
@@ -194,6 +213,37 @@ def _do_install(c: str) -> None:
                 return
             _set(c, "done", "Готово — распознавание текста с экрана доступно "
                  "(для русского нужен языковой пакет rus в Tesseract).", ok=True)
+
+        elif c == "audio_loopback":
+            import tempfile
+            import urllib.request
+            import zipfile
+            _set(c, "running", "Скачивание VB-CABLE с vb-audio.com…")
+            tmp = tempfile.mkdtemp(prefix="vbcable_")
+            zip_path = os.path.join(tmp, "vbcable.zip")
+            urllib.request.urlretrieve(
+                "https://download.vb-audio.com/Download_CABLE/VBCABLE_Driver_Pack43.zip",
+                zip_path)
+            with zipfile.ZipFile(zip_path) as z:
+                z.extractall(tmp)
+            setup = os.path.join(tmp, "VBCABLE_Setup_x64.exe")
+            if not os.path.exists(setup):
+                _set(c, "error", "Не нашёл установщик VB-CABLE в архиве. "
+                     "Установите вручную с vb-audio.com/Cable.", ok=False)
+                return
+            _set(c, "running", "Запускаю установщик драйвера — подтвердите запрос Windows (UAC)…")
+            try:
+                _run([setup, "-i"], 600)  # -i = silent install; the driver asks for UAC
+            except Exception:
+                pass
+            if _loopback_device_present():
+                _set(c, "done", "Готово — устройство VB-CABLE установлено. "
+                     "Выберите «CABLE Output» в списке аудио-устройств.", ok=True)
+            else:
+                _set(c, "done", "Установщик VB-CABLE запущен. Скорее всего нужна "
+                     "ПЕРЕЗАГРУЗКА. После неё: 1) сделайте «CABLE Input» устройством "
+                     "вывода по умолчанию (чтобы звук встречи шёл в кабель), "
+                     "2) выберите «CABLE Output» в списке аудио-устройств здесь.", ok=True)
     except subprocess.TimeoutExpired:
         _set(c, "error", "Превышено время установки. Попробуйте ещё раз.", ok=False)
     except Exception as e:  # noqa: BLE001
