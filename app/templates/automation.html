@@ -127,7 +127,10 @@
       <div><label>Имя бота в встрече</label><input id="bot_join_name" type="text" placeholder="Протокол-бот"></div>
     </div>
     <div class="grid2">
-      <div><label>Путь к ffmpeg</label><input id="ffmpeg_path" type="text" placeholder="ffmpeg"></div>
+      <div><label>Программа ffmpeg (путь, если нет в системе)</label>
+        <input id="ffmpeg_path" type="text" placeholder="ffmpeg (или полный путь к ffmpeg.exe)">
+        <div class="note" style="margin-top:4px">ffmpeg — бесплатная программа записи/конвертации видео и звука. Обычно ставится один раз, и поле можно оставить как <code>ffmpeg</code>. Если её нет — нажмите «Установить ffmpeg» ниже, путь пропишется сам.</div>
+      </div>
       <div><label>Аудио-устройство (loopback / виртуальный кабель)</label>
         <select id="audio_device"><option value="">— выбрать —</option></select>
       </div>
@@ -155,6 +158,7 @@
       <button class="go" onclick="saveRecorder()">Сохранить</button>
     </div>
     <div id="recorder_status" class="statusline"></div>
+    <div id="deps_install" class="row" style="margin-top:8px;flex-direction:column;align-items:stretch;gap:8px"></div>
 
     <details style="margin-top:14px">
       <summary style="cursor:pointer;color:var(--muted);font-size:13px">Тест записи (зайти и записать N секунд)</summary>
@@ -319,6 +323,35 @@ async function recorderStatus(){
     parts.push((r.capture.ready?"<span class='ok'>✓</span>":"<span class='warn'>•</span>")+" захват: "+esc(r.capture.detail||""));
     $("recorder_status").innerHTML=parts.map(p=>"<div>"+p+"</div>").join("");
   }catch(e){ $("recorder_status").textContent=e.message; }
+  renderDeps();
+}
+
+/* In-app installers for optional deps (install into the app's .venv). */
+const DEP_TARGETS=["playwright","ffmpeg"];
+let _depPoll=null;
+async function renderDeps(){
+  let st; try{ st=await api("GET","/api/setup/deps"); }catch{ return; }
+  const html=[]; let polling=false;
+  for(const c of DEP_TARGETS){
+    const d=st[c]; if(!d||d.ready) continue;
+    const ins=d.install||{};
+    if(ins.state==="running"){
+      polling=true;
+      html.push(`<div class="note">⏳ ${esc(d.label)}: ${esc(ins.message||"устанавливаю…")}</div>`);
+    }else{
+      const err=ins.state==="error"?`<div class="warn" style="margin-bottom:4px">${esc(ins.message||"ошибка")}</div>`:"";
+      const verb=ins.state==="error"?"Повторить установку":"Установить";
+      html.push(`<div>${err}<button class="go" onclick="installDep('${c}')">⤓ ${verb}: ${esc(d.label)}</button></div>`);
+    }
+  }
+  $("deps_install").innerHTML=html.join("");
+  clearTimeout(_depPoll);
+  if(polling){ _depPoll=setTimeout(renderDeps,2500); }
+  else if(html.length===0){ /* всё готово */ }
+}
+async function installDep(c){
+  try{ await api("POST","/api/setup/deps/"+c+"/install"); }catch(e){ toast(e.message); }
+  renderDeps();
 }
 async function loadAudioDevices(selected){
   try{ const d=await api("GET","/api/automation/recorder/audio-devices");

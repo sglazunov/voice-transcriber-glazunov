@@ -386,6 +386,23 @@ def ollama_install_cancel():
     return ollama_setup.cancel()
 
 
+# ---- Optional dependencies (install into the app's venv from the UI) -------
+@app.get("/api/setup/deps")
+def deps_status():
+    """Readiness + install progress of optional deps (playwright/diariz/ffmpeg)."""
+    from . import deps_setup
+    return deps_setup.status()
+
+
+@app.post("/api/setup/deps/{component}/install")
+def deps_install(component: str):
+    """Install one optional dependency into the app's venv (background)."""
+    from . import deps_setup
+    if component not in deps_setup.COMPONENTS:
+        raise HTTPException(404, "Неизвестный компонент")
+    return deps_setup.install(component)
+
+
 # --------------------------------------------------------------------------- #
 # Meeting automation (Weeek → record → cloud → protocol). See app/automation.
 # --------------------------------------------------------------------------- #
