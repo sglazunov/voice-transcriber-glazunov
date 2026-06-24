@@ -368,6 +368,70 @@ def ollama_install_cancel():
     return ollama_setup.cancel()
 
 
+# --------------------------------------------------------------------------- #
+# Meeting automation (Weeek → record → cloud → protocol). See app/automation.
+# --------------------------------------------------------------------------- #
+@app.get("/api/automation/settings")
+def automation_settings():
+    """Current automation settings (secrets redacted to presence flags)."""
+    from .automation import settings as auto_settings
+    return auto_settings.redacted()
+
+
+class AutomationSettings(BaseModel):
+    weeek_token: str | None = None
+    weeek_project_id: str | int | None = None
+    cloud: str | None = None
+    enabled: bool | None = None
+    analyze_provider: str | None = None
+    poll_interval_sec: int | None = None
+    lookahead_min: int | None = None
+    bot_join_name: str | None = None
+    post_back_to_weeek: bool | None = None
+
+
+@app.post("/api/automation/settings")
+def automation_save(body: AutomationSettings):
+    """Persist automation settings. Only non-null fields are updated."""
+    from .automation import settings as auto_settings
+    values = {k: v for k, v in body.model_dump().items() if v is not None}
+    auto_settings.save(values)
+    return auto_settings.redacted()
+
+
+@app.get("/api/automation/meetings")
+def automation_meetings():
+    """Upcoming meeting tasks from Weeek that carry a Telemost link."""
+    from .automation import settings as auto_settings, weeek
+    cfg = auto_settings.load()
+    token = cfg.get("weeek_token")
+    if not token:
+        raise HTTPException(400, "Сначала задайте токен Weeek в настройках.")
+    try:
+        meetings = weeek.upcoming_meetings(token, cfg.get("weeek_project_id"))
+    except weeek.WeeekError as e:
+        raise HTTPException(502, str(e))
+    return {"meetings": [
+        {"task_id": m.task_id, "title": m.title, "url": m.url,
+         "start": m.start.isoformat() if m.start else None,
+         "project_id": m.project_id}
+        for m in meetings
+    ]}
+
+
+@app.get("/api/automation/weeek/probe")
+def automation_weeek_probe(task_id: str):
+    """Return the raw JSON of one Weeek task — used to pin date/link field names."""
+    from .automation import settings as auto_settings, weeek
+    token = auto_settings.get("weeek_token")
+    if not token:
+        raise HTTPException(400, "Сначала задайте токен Weeek в настройках.")
+    try:
+        return weeek.probe_task(token, task_id)
+    except weeek.WeeekError as e:
+        raise HTTPException(502, str(e))
+
+
 @app.get("/healthz")
 def healthz():
     return {"ok": True, "model": config.MODEL, "diarization": config.DIARIZATION_ENABLED}
