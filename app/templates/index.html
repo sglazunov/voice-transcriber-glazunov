@@ -390,6 +390,7 @@
       <button class="go" id="go" disabled>Распознать</button>
     </div>
     <div id="modelHint" class="muted" style="margin-top:6px;font-size:12px;line-height:1.5"></div>
+    <div id="modelDownload" style="margin-top:6px"></div>
     <div id="diarHints" class="hidden" style="margin-top:8px;background:#1c1208;
          border:1px solid #4a3200;border-radius:10px;padding:10px 12px;
          font-size:12px;color:var(--muted);line-height:1.5"></div>
@@ -519,6 +520,34 @@ function onModelChange(){
   const el=$("modelHint"); if(!el) return;
   const v=$("model")?$("model").value:"";
   el.textContent=MODEL_INFO[v]||MODEL_INFO[""];
+  refreshModelDownload(v);
+}
+/* Show a "download model" button when the chosen recognition model isn't cached
+   yet — so it can be fetched without attaching a file first. */
+let _modelPoll=null;
+async function refreshModelDownload(v){
+  const box=$("modelDownload"); if(!box) return;
+  clearTimeout(_modelPoll);
+  let s; try{ s=await(await fetch("/api/model/status?name="+encodeURIComponent(v||""))).json(); }catch{ box.innerHTML=""; return; }
+  const ins=s.download||{};
+  if(s.downloaded && ins.state!=="running"){
+    box.innerHTML='<span class="muted" style="font-size:12px;color:#22c55e">✓ Модель '+esc(s.name)+' скачана</span>';
+    return;
+  }
+  if(ins.state==="running"){
+    const pct=(ins.percent!=null)?(" "+ins.percent+"%"):"";
+    box.innerHTML='<div class="muted" style="font-size:12px"><span class="spinner"></span>'+esc(ins.message||("Скачивание"+pct))+'</div>';
+    _modelPoll=setTimeout(()=>refreshModelDownload(v),1500);
+    return;
+  }
+  const err=ins.state==="error"?`<div class="warn" style="font-size:12px;margin-bottom:4px">${esc(ins.message||"ошибка")}</div>`:"";
+  box.innerHTML=err+`<button class="ghost" type="button" onclick="downloadModel('${esc(s.name)}')">⤓ Скачать модель ${esc(s.name)}${s.size_hint?(" ("+esc(s.size_hint)+")"):""}</button>
+    <div class="muted" style="font-size:11px;margin-top:3px">Иначе модель скачается при первом «Распознать».</div>`;
+}
+async function downloadModel(name){
+  const v=$("model")?$("model").value:"";
+  try{ await fetch("/api/model/download?name="+encodeURIComponent(v||""),{method:"POST"}); }catch{}
+  refreshModelDownload(v);
 }
 async function onDiarizeToggle(){
   const box=$("diarHints");
