@@ -49,7 +49,10 @@ _DEFAULTS: dict[str, Any] = {
     "end_when_alone_sec": 90,         # stop after the room sits at/below the threshold this long
     "min_participants": 1,            # stop when total in room (incl. bot) drops to <= this
                                       # 1 = stop only when everyone left; 3 = ignore a small lingering tail
-    # --- after recording ---
+    # --- after recording: independently toggleable stages ---
+    "do_transcribe": True,            # run speech recognition on the recording
+    "do_protocol": True,              # build the Word protocol (needs do_transcribe)
+    "ocr_screen": True,               # recognise on-screen text (slides/code) too
     "analyze_provider": "auto",       # which LLM builds the protocol
     "post_back_to_weeek": True,       # attach protocol link as a task comment
 }

@@ -405,6 +405,9 @@ class AutomationSettings(BaseModel):
     yandex_disk: dict | None = None
     gdrive: dict | None = None
     enabled: bool | None = None
+    do_transcribe: bool | None = None
+    do_protocol: bool | None = None
+    ocr_screen: bool | None = None
     analyze_provider: str | None = None
     poll_interval_sec: int | None = None
     lookahead_min: int | None = None

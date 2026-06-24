@@ -174,26 +174,41 @@ class Scheduler:
             else:
                 log(f"Облако: {up.get('error')}")
 
-            # Hand off to the existing transcription + protocol pipeline.
-            self._set(st, "transcribing", "Распознаю и собираю протокол…")
-            job = store.create(
-                filename=Path(out).name, audio_path=out,
-                language=config.DEFAULT_LANGUAGE, diarize=False,
-                analyze=True, provider=cfg.get("analyze_provider") or "auto",
-                capture_screen=bool(cfg.get("capture_video", True)))
-            st.job_id = job.id
+            # Optionally hand off to the transcription / protocol pipeline.
+            # Recording always happens; transcription and protocol are separate
+            # toggles so the user records only what they need.
+            do_transcribe = bool(cfg.get("do_transcribe", True))
+            do_protocol = bool(cfg.get("do_protocol", True))
+            job = None
+            if do_transcribe:
+                stage = ("Распознаю речь и собираю протокол…" if do_protocol
+                         else "Распознаю речь…")
+                self._set(st, "transcribing", stage)
+                job = store.create(
+                    filename=Path(out).name, audio_path=out,
+                    language=config.DEFAULT_LANGUAGE, diarize=False,
+                    analyze=do_protocol,
+                    provider=cfg.get("analyze_provider") or "auto",
+                    capture_screen=bool(cfg.get("ocr_screen", True)))
+                st.job_id = job.id
 
-            # Post the cloud link back to Weeek (protocol link can't be known yet).
+            # Post the cloud link back to Weeek (protocol is produced later).
             if cfg.get("post_back_to_weeek") and st.cloud_url:
+                tail = (f"\nРаспознавание/протокол: job {job.id}." if job
+                        else "\nРаспознавание отключено — только запись.")
                 ok = weeek.add_comment(
                     cfg.get("weeek_token"), st.task_id,
-                    f"🎥 Запись встречи: {st.cloud_url}\n"
-                    f"Протокол собирается автоматически (job {job.id}).")
+                    f"🎥 Запись встречи: {st.cloud_url}{tail}")
                 log(f"Комментарий в Weeek: {'ок' if ok else 'не удалось'}")
 
-            self._set(st, "done",
-                      f"Готово. Запись { 'в облаке' if st.cloud_url else 'локально'}, "
-                      f"протокол — job {job.id}.")
+            where = "в облаке" if st.cloud_url else "локально"
+            if not do_transcribe:
+                detail = f"Готово. Запись {where} (распознавание отключено)."
+            elif not do_protocol:
+                detail = f"Готово. Запись {where}, распознавание — job {job.id} (без протокола)."
+            else:
+                detail = f"Готово. Запись {where}, распознавание+протокол — job {job.id}."
+            self._set(st, "done", detail)
         except Exception as e:  # noqa: BLE001
             self._set(st, "error", f"Сбой: {e}")
         finally:
