@@ -30,7 +30,8 @@ _DEFAULTS: dict[str, Any] = {
     # --- where to put finished recordings ---
     "cloud": "local",                 # "local" | "gdrive" | "yandex_disk"
     "yandex_disk": {"token": "", "folder": "disk:/Телемост-записи"},
-    "gdrive": {"client_config": "", "token": "", "folder_id": ""},
+    "gdrive": {"client_id": "", "client_secret": "", "refresh_token": "",
+               "folder_id": ""},
     "local_dir": "",                  # empty -> DATA_DIR/recordings
     # --- scheduler / bot behaviour ---
     "poll_interval_sec": 120,         # how often to re-read Weeek
@@ -70,6 +71,11 @@ def load() -> dict[str, Any]:
         return data
 
 
+# Keys whose values are sub-dicts that should be MERGED, not replaced, so a
+# partial update (e.g. just the Yandex token) keeps the rest (folder).
+_NESTED_KEYS = ("yandex_disk", "gdrive")
+
+
 def save(values: dict[str, Any]) -> dict[str, Any]:
     """Merge `values` into the stored settings and persist. Returns new state."""
     with _LOCK:
@@ -81,7 +87,13 @@ def save(values: dict[str, Any]) -> dict[str, Any]:
                     data.update(stored)
             except (ValueError, OSError):
                 pass
-        data.update(values)
+        for k, v in values.items():
+            if k in _NESTED_KEYS and isinstance(v, dict):
+                base = dict(data.get(k) or {})
+                base.update({kk: vv for kk, vv in v.items() if vv is not None})
+                data[k] = base
+            else:
+                data[k] = v
         _atomic_write(data)
         return data
 
@@ -99,7 +111,9 @@ def redacted() -> dict[str, Any]:
     yd["token"] = bool(yd.get("token"))
     out["yandex_disk"] = yd
     gd = dict(data.get("gdrive") or {})
-    gd["token"] = bool(gd.get("token"))
-    gd["client_config"] = bool(gd.get("client_config"))
+    for secret in ("client_secret", "refresh_token"):
+        gd[secret] = bool(gd.get(secret))
+    # client_id isn't very secret but no need to ship it back; show presence.
+    gd["client_id"] = bool(gd.get("client_id"))
     out["gdrive"] = gd
     return out

@@ -1,6 +1,7 @@
 """FastAPI app: web upload UI + REST API for transcription jobs."""
 from __future__ import annotations
 
+import os
 import shutil
 from pathlib import Path
 
@@ -383,6 +384,9 @@ class AutomationSettings(BaseModel):
     weeek_project_id: str | int | None = None
     timezone: str | None = None
     cloud: str | None = None
+    local_dir: str | None = None
+    yandex_disk: dict | None = None
+    gdrive: dict | None = None
     enabled: bool | None = None
     analyze_provider: str | None = None
     poll_interval_sec: int | None = None
@@ -424,6 +428,37 @@ def automation_meetings():
          "project_id": m.project_id}
         for m in meetings
     ]}
+
+
+@app.get("/api/automation/clouds/status")
+def automation_clouds_status():
+    """Per-backend cloud readiness + which one is selected (for the UI)."""
+    from .automation import settings as auto_settings, clouds
+    return clouds.readiness(auto_settings.load())
+
+
+@app.post("/api/automation/clouds/test")
+def automation_clouds_test(backend: str | None = None):
+    """Upload a tiny test file to the selected (or given) cloud to verify creds."""
+    import tempfile
+    from datetime import datetime, timezone
+    from .automation import settings as auto_settings, clouds
+    cfg = auto_settings.load()
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False,
+                                     encoding="utf-8") as f:
+        f.write("voice-transcriber cloud test\n")
+        tmp = f.name
+    try:
+        res = clouds.upload(tmp, f"vtx-test-{stamp}.txt", cfg, backend=backend)
+    finally:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+    if not res.get("ok"):
+        raise HTTPException(502, res.get("error") or "Не удалось загрузить.")
+    return res
 
 
 @app.get("/api/automation/weeek/probe")
