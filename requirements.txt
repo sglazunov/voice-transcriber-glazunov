@@ -32,6 +32,12 @@ pytesseract>=0.3.10
 # AI analysis via Claude API (requires ANTHROPIC_API_KEY env var)
 anthropic>=0.40
 
+# --- Optional: meeting automation recorder (bot joins Telemost & records) ---
+# Needed only on the machine that runs the recorder. After installing, also run:
+#   playwright install chromium
+# Plus an external ffmpeg binary and a loopback/virtual audio device on Windows.
+# playwright>=1.44
+
 # --- Optional: speaker diarization (heavy, needs >4 GB RAM + HF token) ---
 # Install separately only after a RAM upgrade. Kept out of the base install
 # on purpose so the service stays within the laptop's memory budget.

@@ -393,6 +393,16 @@ class AutomationSettings(BaseModel):
     lookahead_min: int | None = None
     bot_join_name: str | None = None
     post_back_to_weeek: bool | None = None
+    # recorder
+    auth_mode: str | None = None
+    browser_profile_dir: str | None = None
+    ffmpeg_path: str | None = None
+    audio_device: str | None = None
+    capture_video: bool | None = None
+    headless: bool | None = None
+    join_timeout_sec: int | None = None
+    end_when_alone_sec: int | None = None
+    max_meeting_min: int | None = None
 
 
 @app.post("/api/automation/settings")
@@ -458,6 +468,62 @@ def automation_clouds_test(backend: str | None = None):
             pass
     if not res.get("ok"):
         raise HTTPException(502, res.get("error") or "Не удалось загрузить.")
+    return res
+
+
+@app.get("/api/automation/recorder/status")
+def automation_recorder_status():
+    """What the Telemost recorder needs (Playwright/ffmpeg/audio) — for the UI."""
+    from .automation import settings as auto_settings, recorder
+    return recorder.readiness(auto_settings.load())
+
+
+@app.get("/api/automation/recorder/audio-devices")
+def automation_recorder_audio_devices():
+    """List dshow audio devices ffmpeg can capture (Windows)."""
+    from .automation import settings as auto_settings
+    from .automation.recorder import capture
+    cfg = auto_settings.load()
+    return {"devices": capture.list_audio_devices(cfg.get("ffmpeg_path") or "ffmpeg")}
+
+
+@app.post("/api/automation/recorder/login")
+def automation_recorder_login():
+    """Open a headed browser so the user logs into Yandex once (profile mode)."""
+    import threading
+    from .automation import settings as auto_settings
+    from .automation.recorder import browser
+    if not browser.playwright_available():
+        raise HTTPException(400, "Playwright не установлен: pip install playwright "
+                                 "&& playwright install chromium")
+    cfg = auto_settings.load()
+    threading.Thread(target=browser.login, args=(cfg,), daemon=True).start()
+    return {"started": True,
+            "detail": "Открывается окно браузера — войдите в Яндекс и закройте его."}
+
+
+class RecorderTest(BaseModel):
+    url: str
+    seconds: int = 30
+
+
+@app.post("/api/automation/recorder/test")
+def automation_recorder_test(body: RecorderTest):
+    """Manually join a Telemost link and record for a few seconds, to verify
+    the bot + capture work on this machine before automating."""
+    import time
+    from .automation import settings as auto_settings, recorder
+    cfg = auto_settings.load()
+    out = str(config.DATA_DIR / "recordings" /
+              f"test-{time.strftime('%Y%m%d-%H%M%S')}.mp4")
+    Path(out).parent.mkdir(parents=True, exist_ok=True)
+    deadline = time.time() + max(5, min(int(body.seconds), 300))
+    logs: list[str] = []
+    res = recorder.record_meeting(
+        body.url, out, cfg,
+        on_log=lambda m: logs.append(str(m)),
+        should_stop=lambda: time.time() > deadline)
+    res["logs"] = logs
     return res
 
 

@@ -39,6 +39,14 @@ _DEFAULTS: dict[str, Any] = {
     "max_meeting_min": 240,           # hard cap on a single recording
     "bot_join_name": "Протокол-бот",  # display name shown in Telemost
     "headless": True,
+    # --- recorder (bot joins Telemost and records) ---
+    "auth_mode": "guest",             # "guest" (link only) | "profile" (logged in)
+    "browser_profile_dir": "",        # profile dir for auth_mode=profile; "" -> DATA_DIR/browser-profile
+    "ffmpeg_path": "ffmpeg",          # ffmpeg binary (PATH or absolute)
+    "audio_device": "",               # Windows dshow audio device to capture (loopback/virtual cable)
+    "capture_video": True,            # record the screen too (slides/screen-share)
+    "join_timeout_sec": 60,           # how long to wait to get into the call
+    "end_when_alone_sec": 90,         # stop if the bot is the only one left this long
     # --- after recording ---
     "analyze_provider": "auto",       # which LLM builds the protocol
     "post_back_to_weeek": True,       # attach protocol link as a task comment
