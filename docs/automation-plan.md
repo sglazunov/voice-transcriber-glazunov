@@ -40,5 +40,7 @@ clouds.upload → jobs.submit(mp4, analyze=True) → docx-протокол →
 (опц.) комментарий со ссылкой в задачу Weeek.
 
 ## Статус
-- Фаза 1 (этот коммит): settings + weeek client + отладочный probe-эндпоинт.
-- Дальше по порядку: clouds → recorder → scheduler → UI.
+- Фаза 1 ✅: settings + weeek client (проверен на живом аккаунте) + probe-эндпоинт.
+- Фаза 2 ✅: облачные загрузчики (local / Яндекс Диск / Google Drive),
+  эндпоинты /api/automation/clouds/status и /clouds/test.
+- Дальше по порядку: recorder (бот) → scheduler → UI.
