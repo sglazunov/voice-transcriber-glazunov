@@ -403,6 +403,21 @@ def deps_install(component: str):
     return deps_setup.install(component)
 
 
+# ---- Recognition models (pre-download from the UI, no transcription) -------
+@app.get("/api/model/status")
+def model_status(name: str = ""):
+    """Whether a Whisper model is downloaded + download progress."""
+    from . import whisper_setup
+    return whisper_setup.status(name)
+
+
+@app.post("/api/model/download")
+def model_download(name: str = ""):
+    """Download a Whisper model into the cache (background, no transcription)."""
+    from . import whisper_setup
+    return whisper_setup.download(name)
+
+
 # --------------------------------------------------------------------------- #
 # Meeting automation (Weeek → record → cloud → protocol). See app/automation.
 # --------------------------------------------------------------------------- #
