@@ -59,4 +59,7 @@ clouds.upload → jobs.submit(mp4, analyze=True) → docx-протокол →
 - Фаза 2 ✅: облачные загрузчики (local / Яндекс Диск / Google Drive).
 - Фаза 3 ✅: рекордер (Playwright + ffmpeg), гость и профиль, эндпоинты status/
   audio-devices/login/test. Требует донастройки на реальной машине.
-- Дальше: scheduler → UI.
+- Фаза 4 ✅: планировщик (опрос Weeek → запись → облако → распознавание+протокол
+  → комментарий в Weeek). Автостарт, гейт по `enabled`, эндпоинты
+  /scheduler/status и /scheduler/run-now. Проверен на живом опросе Weeek.
+- Дальше: UI-вкладка «Автоматизация».
