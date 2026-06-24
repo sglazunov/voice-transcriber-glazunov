@@ -21,9 +21,19 @@ _NAME_INPUTS = [
     'input[name="name"]', 'input[placeholder*="мя"]',
     'input[placeholder*="name" i]', 'input[type="text"]',
 ]
+# Telemost first shows an interstitial ("Вы подключаетесь… → Продолжить в
+# браузере") before the pre-join screen. We must click through it.
+_CONTINUE_BROWSER = [
+    'button:has-text("Продолжить в браузере")',
+    'a:has-text("Продолжить в браузере")',
+    'button:has-text("Continue in browser")',
+    'a:has-text("Continue in browser")',
+    'button:has-text("Продолжить")', 'a:has-text("Продолжить")',
+]
 _JOIN_BUTTONS = [
     'button:has-text("Подключиться")', 'button:has-text("Войти")',
     'button:has-text("Присоединиться")', 'button:has-text("Join")',
+    'button:has-text("Продолжить")',
     '[data-testid*="join"]', 'button[type="submit"]',
 ]
 _MUTE_MIC = [
@@ -104,46 +114,78 @@ class TelemostBot:
             viewport={"width": 1280, "height": 720})
         self._page = self._ctx.pages[0] if self._ctx.pages else self._ctx.new_page()
 
-    def _click_first(self, selectors, timeout=2500) -> bool:
-        for sel in selectors:
-            try:
-                el = self._page.wait_for_selector(sel, timeout=timeout,
-                                                  state="visible")
-                if el:
-                    el.click()
-                    return True
-            except Exception:
-                continue
+    def _aborted(self) -> bool:
+        sc = getattr(self, "_should_stop", None)
+        try:
+            return bool(sc and sc())
+        except Exception:
+            return False
+
+    def _click_any(self, selectors, overall_ms=12000, poll_ms=500) -> bool:
+        """Poll ALL selectors repeatedly until one is clickable or we time out.
+
+        Much better than waiting `timeout` on each selector in turn (that could
+        block for selectors×timeout — minutes — when the page hasn't loaded the
+        expected control yet). Bails early if the user pressed «Остановить»."""
+        deadline = time.time() + overall_ms / 1000
+        while time.time() < deadline and not self._aborted():
+            for sel in selectors:
+                try:
+                    el = self._page.query_selector(sel)
+                    if el and el.is_visible():
+                        el.click()
+                        return True
+                except Exception:
+                    pass
+            self._page.wait_for_timeout(poll_ms)
+        return False
+
+    def _fill_any(self, selectors, value, overall_ms=6000) -> bool:
+        deadline = time.time() + overall_ms / 1000
+        while time.time() < deadline:
+            for sel in selectors:
+                try:
+                    el = self._page.query_selector(sel)
+                    if el and el.is_visible():
+                        el.fill(value)
+                        return True
+                except Exception:
+                    pass
+            self._page.wait_for_timeout(400)
         return False
 
     # -- joining ------------------------------------------------------------
-    def join(self, url: str) -> bool:
+    def join(self, url: str, should_stop=None) -> bool:
         """Open the meeting and get into the call. Returns True on success."""
+        self._should_stop = should_stop
+        join_budget = int(self.cfg.get("join_timeout_sec", 60))
         self._launch()
         self._on_log(f"Открываю встречу: {url}")
         self._page.goto(url, wait_until="domcontentloaded", timeout=60000)
-        self._page.wait_for_timeout(4000)
+        self._page.wait_for_timeout(3000)
 
-        # Set a display name if the guest form asks for one.
+        # 1) Interstitial: "Продолжить в браузере".
+        if self._click_any(_CONTINUE_BROWSER, overall_ms=10000):
+            self._on_log("Прошёл заглушку «Продолжить в браузере».")
+            self._page.wait_for_timeout(4000)
+        else:
+            self._on_log("Заглушки «Продолжить в браузере» не было (или уже пройдена).")
+
+        # 2) Display name on the guest pre-join form (if asked).
         name = self.cfg.get("bot_join_name") or "Протокол-бот"
-        for sel in _NAME_INPUTS:
-            try:
-                el = self._page.wait_for_selector(sel, timeout=1500, state="visible")
-                if el:
-                    el.fill(name)
-                    break
-            except Exception:
-                continue
+        if self._fill_any(_NAME_INPUTS, name, overall_ms=8000):
+            self._on_log(f"Указал имя: {name}")
 
-        # Mute mic & camera before joining (best effort).
-        self._click_first(_MUTE_MIC, timeout=1500)
-        self._click_first(_MUTE_CAM, timeout=1500)
+        # 3) Mute mic & camera before joining (best effort).
+        self._click_any(_MUTE_MIC, overall_ms=2500)
+        self._click_any(_MUTE_CAM, overall_ms=2500)
 
-        joined = self._click_first(_JOIN_BUTTONS,
-                                   timeout=self.cfg.get("join_timeout_sec", 60) * 1000)
+        # 4) Join the call (poll up to the configured budget).
+        joined = self._click_any(_JOIN_BUTTONS, overall_ms=join_budget * 1000)
+        self._on_log(f"Клик по кнопке входа: {joined}")
         self._page.wait_for_timeout(5000)
         in_call = self.is_in_call()
-        self._on_log(f"Клик по «подключиться»: {joined}; в звонке: {in_call}")
+        self._on_log(f"В звонке: {in_call}")
         return in_call or joined
 
     def is_in_call(self) -> bool:
