@@ -39,8 +39,24 @@ Weeek task (ссылка + время) → scheduler ждёт T → recorder п�
 clouds.upload → jobs.submit(mp4, analyze=True) → docx-протокол →
 (опц.) комментарий со ссылкой в задачу Weeek.
 
+## Настройка рекордера на Windows (фаза 3)
+1. `pip install playwright` затем `playwright install chromium`.
+2. ffmpeg в PATH (или укажите `ffmpeg_path`). Проверка: `ffmpeg -version`.
+3. Звук встречи нужно отдать в loopback-устройство, которое пишет ffmpeg:
+   - вариант А: включить «Стерео микшер» (Stereo Mix) в устройствах записи;
+   - вариант Б: поставить VB-CABLE и сделать его устройством вывода по умолчанию.
+   Затем выбрать это устройство в настройке `audio_device`
+   (список — `GET /api/automation/recorder/audio-devices`).
+4. Режим входа `auth_mode`: `guest` (по ссылке) или `profile`. Для `profile`
+   один раз войдите в Яндекс: `POST /api/automation/recorder/login`.
+5. Проверка: `POST /api/automation/recorder/test {url, seconds}` — бот зайдёт и
+   запишет несколько секунд; вернёт путь к файлу и логи. Селекторы Телемоста,
+   скорее всего, придётся подправить под текущую вёрстку (в браузере есть
+   скриншот при неудачном входе).
+
 ## Статус
 - Фаза 1 ✅: settings + weeek client (проверен на живом аккаунте) + probe-эндпоинт.
-- Фаза 2 ✅: облачные загрузчики (local / Яндекс Диск / Google Drive),
-  эндпоинты /api/automation/clouds/status и /clouds/test.
-- Дальше по порядку: recorder (бот) → scheduler → UI.
+- Фаза 2 ✅: облачные загрузчики (local / Яндекс Диск / Google Drive).
+- Фаза 3 ✅: рекордер (Playwright + ffmpeg), гость и профиль, эндпоинты status/
+  audio-devices/login/test. Требует донастройки на реальной машине.
+- Дальше: scheduler → UI.
