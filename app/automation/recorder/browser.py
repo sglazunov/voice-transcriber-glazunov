@@ -48,6 +48,30 @@ _IN_CALL = [
     'button[aria-label*="авершить"]', 'button[aria-label*="leave" i]',
     'button:has-text("Завершить")', '[data-testid*="hangup"]',
 ]
+# --- Telemost native recording controls (best-effort; tuned vs the live UI) ---
+_REC_OPEN = [  # open the record control or the "Ещё/More" menu that holds it
+    'button[aria-label*="апись"]', 'button[aria-label*="record" i]',
+    'button:has-text("Запись")', 'button:has-text("Записать")',
+    '[data-testid*="record"]', 'button[aria-label*="Ещё"]',
+    'button[aria-label*="More" i]', '[data-testid*="more"]',
+    'button[aria-label*="ополнительно"]',
+]
+_REC_START = [  # the actual "record to computer" option
+    'text=Запись на компьютер', 'text=Записать на компьютер',
+    'text=Сохранить на компьютер', 'button:has-text("На компьютер")',
+    'text=Начать запись', 'button:has-text("Начать запись")',
+    'button:has-text("Записать встречу")', 'text=Запись на устройство',
+]
+_REC_CONFIRM = [  # a possible confirmation dialog
+    'button:has-text("Начать")', 'button:has-text("Записать")',
+    'button:has-text("Продолжить")', 'button:has-text("Ок")',
+    'button:has-text("Понятно")',
+]
+_REC_STOP = [
+    'button:has-text("Остановить запись")', 'text=Остановить запись',
+    'button:has-text("Завершить запись")', 'text=Завершить запись',
+    'button[aria-label*="становить запись"]', 'button:has-text("Остановить")',
+]
 # Launch args: auto-accept mic/cam prompts; fake mic so we never send real audio.
 _LAUNCH_ARGS = [
     "--use-fake-ui-for-media-stream",
@@ -111,8 +135,25 @@ class TelemostBot:
         self._ctx = self._pw.chromium.launch_persistent_context(
             user_dir, headless=headless, args=_LAUNCH_ARGS,
             permissions=["microphone", "camera"],
+            accept_downloads=True,   # Telemost "Запись на компьютер" → a download
             viewport={"width": 1280, "height": 720})
         self._page = self._ctx.pages[0] if self._ctx.pages else self._ctx.new_page()
+        self._download_path = None
+        self._ctx.on("download", self._on_download)
+
+    # -- Telemost native recording -----------------------------------------
+    def _on_download(self, dl) -> None:
+        """Capture the file Telemost produces when recording stops."""
+        try:
+            suggested = dl.suggested_filename or "recording.webm"
+            ext = Path(suggested).suffix or ".webm"
+            target = str(Path(self._out_path).with_suffix(ext)) if getattr(
+                self, "_out_path", None) else suggested
+            dl.save_as(target)
+            self._download_path = target
+            self._on_log(f"Файл записи получен от Телемоста: {target}")
+        except Exception as e:  # noqa: BLE001
+            self._on_log(f"Не удалось сохранить запись: {e}")
 
     def _aborted(self) -> bool:
         sc = getattr(self, "_should_stop", None)
@@ -196,6 +237,47 @@ class TelemostBot:
             except Exception:
                 continue
         return False
+
+    def start_recording(self, out_path: str) -> bool:
+        """Press Telemost's «Запись → на компьютер». Returns True if it started.
+
+        Recording is normally available only to the meeting's host, so the bot
+        must be logged in (auth_mode=profile) as the account that created the
+        meeting. Selectors are best-effort against the live Telemost UI."""
+        self._out_path = out_path
+        self._download_path = None
+        # Open a "more"/record menu if the record control is hidden behind one.
+        self._click_any(_REC_OPEN, overall_ms=4000)
+        self._page.wait_for_timeout(800)
+        started = self._click_any(_REC_START, overall_ms=6000)
+        if not started:
+            # Maybe the record button starts recording directly (no submenu).
+            started = self._click_any(_REC_OPEN, overall_ms=3000)
+        self._page.wait_for_timeout(1500)
+        # Confirm a possible "Запись на компьютер" dialog / consent.
+        self._click_any(_REC_CONFIRM, overall_ms=3000)
+        self._on_log(f"Запуск записи Телемоста: {started}")
+        return started
+
+    def stop_recording(self) -> None:
+        """Press Telemost's «Остановить запись» so it finalises and saves."""
+        try:
+            self._click_any(_REC_OPEN, overall_ms=3000)
+            self._page.wait_for_timeout(500)
+            stopped = self._click_any(_REC_STOP, overall_ms=5000)
+            self._click_any(_REC_CONFIRM, overall_ms=2000)  # confirm "завершить"
+            self._on_log(f"Остановка записи Телемоста: {stopped}")
+        except Exception as e:  # noqa: BLE001
+            self._on_log(f"Стоп записи: {e}")
+
+    def wait_for_download(self, timeout: int = 240) -> str | None:
+        """Wait until Telemost's recording file has been saved locally."""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if self._download_path:
+                return self._download_path
+            self._page.wait_for_timeout(1000)
+        return self._download_path
 
     def participant_count(self) -> int | None:
         """Best-effort count of participants (None if it can't be read)."""

@@ -446,6 +446,7 @@ class AutomationSettings(BaseModel):
     bot_join_name: str | None = None
     post_back_to_weeek: bool | None = None
     # recorder
+    record_mode: str | None = None
     auth_mode: str | None = None
     browser_profile_dir: str | None = None
     ffmpeg_path: str | None = None

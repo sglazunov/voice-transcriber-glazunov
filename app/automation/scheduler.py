@@ -196,6 +196,7 @@ class Scheduler:
             if not res.get("ok"):
                 self._set(st, "error", res.get("error") or "Запись не удалась.")
                 return
+            out = res.get("path") or out  # telemost mode may save .webm, not .mp4
 
             # Upload to the chosen cloud (best effort — failure isn't fatal).
             self._set(st, "uploading", "Выгружаю запись в облако…")
