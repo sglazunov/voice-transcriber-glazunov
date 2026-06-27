@@ -49,8 +49,10 @@ def record_meeting(url: str, out_path: str, cfg: dict,
         alone_sec = int(cfg.get("end_when_alone_sec", 90))
         min_p = int(cfg.get("min_participants", 1))
 
-        rec = capture.FFmpegRecorder(out_path, cfg, on_log=log)  # whole screen
-        log("В звонке — пишу экран (ffmpeg).")
+        # Capture only the meeting's browser window (not the whole desktop).
+        title = bot.window_title()
+        rec = capture.FFmpegRecorder(out_path, cfg, on_log=log, window_title=title)
+        log(f"В звонке — пишу окно «{title or 'весь экран (заголовок не найден)'}» (ffmpeg).")
         rec.start()
         reason = bot.wait_until_end(should_stop, max_sec, alone_sec, min_p)
         log(f"Останавливаю запись (причина: {reason}).")
