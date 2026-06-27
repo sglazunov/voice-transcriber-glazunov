@@ -120,13 +120,27 @@ class FFmpegRecorder:
         self._on_log = on_log or (lambda *_: None)
         self._proc: subprocess.Popen | None = None
         self.window_title = window_title
+        self._log_path = out_path + ".ffmpeg.log"
+        self._log_file = None
 
     def start(self) -> None:
         cmd = build_ffmpeg_cmd(self.out_path, self.cfg, self.window_title)
         self._on_log("ffmpeg: " + " ".join(cmd))
+        # Keep ffmpeg's stderr in a log so an immediate failure (window not
+        # found, bad audio device) is diagnosable instead of a silent empty file.
+        self._log_file = open(self._log_path, "w", encoding="utf-8", errors="replace")
         self._proc = subprocess.Popen(
             cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL)
+            stderr=self._log_file)
+
+    def error_tail(self, lines: int = 6) -> str:
+        try:
+            if self._log_file:
+                self._log_file.flush()
+            with open(self._log_path, "r", encoding="utf-8", errors="replace") as f:
+                return " | ".join(t.strip() for t in f.read().splitlines()[-lines:] if t.strip())
+        except Exception:
+            return ""
 
     def stop(self, timeout: int = 15) -> None:
         if not self._proc:
@@ -145,6 +159,11 @@ class FFmpegRecorder:
                 self._proc.kill()
         finally:
             self._proc = None
+            try:
+                if self._log_file:
+                    self._log_file.close()
+            except Exception:
+                pass
 
     @property
     def running(self) -> bool:

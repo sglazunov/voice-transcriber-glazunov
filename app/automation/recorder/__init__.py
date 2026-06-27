@@ -11,6 +11,7 @@ ffmpeg + a loopback audio device on the host — see docs/automation-plan.md.
 """
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 from . import browser, capture
@@ -49,11 +50,25 @@ def record_meeting(url: str, out_path: str, cfg: dict,
         alone_sec = int(cfg.get("end_when_alone_sec", 90))
         min_p = int(cfg.get("min_participants", 1))
 
-        # Capture only the meeting's browser window (not the whole desktop).
+        # Capture only the meeting's browser window; if ffmpeg can't grab that
+        # window (title mismatch etc.) it dies in ~1s — detect that and fall
+        # back to capturing the whole desktop so the recording isn't lost.
         title = bot.window_title()
         rec = capture.FFmpegRecorder(out_path, cfg, on_log=log, window_title=title)
-        log(f"В звонке — пишу окно «{title or 'весь экран (заголовок не найден)'}» (ffmpeg).")
+        log(f"В звонке — пишу окно «{title or '—'}» (ffmpeg).")
         rec.start()
+        time.sleep(3)
+        if not rec.running:
+            err = rec.error_tail()
+            log(f"Захват окна не запустился ({err}). Перехожу на запись всего экрана.")
+            rec = capture.FFmpegRecorder(out_path, cfg, on_log=log, window_title=None)
+            rec.start()
+            time.sleep(3)
+            if not rec.running:
+                return {"ok": False,
+                        "error": "ffmpeg не смог записывать. " + (rec.error_tail() or
+                                 "Проверьте ffmpeg и аудио-устройство (выберите рабочее "
+                                 "из списка).")}
         reason = bot.wait_until_end(should_stop, max_sec, alone_sec, min_p)
         log(f"Останавливаю запись (причина: {reason}).")
         rec.stop()
