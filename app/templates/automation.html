@@ -152,15 +152,23 @@
         <input id="ffmpeg_path" type="text" placeholder="ffmpeg (или полный путь к ffmpeg.exe)">
         <div class="note" style="margin-top:4px">ffmpeg — бесплатная программа записи/конвертации видео и звука. Обычно ставится один раз, и поле можно оставить как <code>ffmpeg</code>. Если её нет — нажмите «Установить ffmpeg» ниже, путь пропишется сам.</div>
       </div>
-      <div><label>Аудио-устройство (loopback / виртуальный кабель)</label>
+      <div><label>Аудио-устройство встречи (звук участников)</label>
         <select id="audio_device"><option value="">— выбрать —</option></select>
       </div>
     </div>
+    <div class="note">
+      🔊 <b>Чтобы в записи был звук встречи</b> (нужно для протокола), выберите выше <b>«CABLE Output (VB-Audio Virtual Cable)»</b> и один раз настройте Windows:<br>
+      1) <b>Параметры → Звук → Вывод</b> → сделайте устройством вывода <b>«CABLE Input (VB-Audio Virtual Cable)»</b> (тогда звук встречи пойдёт в кабель).<br>
+      2) Чтобы <b>самому слышать</b> встречу: <b>Панель управления → Звук → Запись</b> → «CABLE Output» → Свойства → вкладка «Прослушать» → ✓ «Прослушивать с данного устройства» → выберите наушники/динамики.<br>
+      3) Нажмите <b>«Проверить звук»</b> ниже — должно показать «звук есть ✓».
+    </div>
     <div class="row">
+      <button class="ghost" onclick="testAudio()">🔊 Проверить звук (3 сек)</button>
+      <button class="ghost" onclick="loadAudioDevices()">Обновить список устройств</button>
       <button class="ghost" onclick="recorderLogin()">Войти в Яндекс</button>
       <button class="ghost" onclick="checkLogin()">Проверить вход</button>
-      <button class="ghost" onclick="loadAudioDevices()">Обновить список устройств</button>
     </div>
+    <div id="audio_status" class="statusline"></div>
     <div id="login_status" class="statusline"></div>
     <div class="chk"><input id="capture_video" type="checkbox"> Записывать экран (для распознавания того, что показывают)</div>
     <div class="chk"><input id="headless" type="checkbox"> Скрытый браузер (headless)</div>
@@ -423,6 +431,18 @@ async function recorderLogin(){
   try{ const r=await api("POST","/api/automation/recorder/login"); toast(r.detail||"Открываю браузер…");
     setTimeout(checkLogin, 1500); }
   catch(e){ toast(e.message,true); }
+}
+async function testAudio(){
+  const el=$("audio_status"); if(!el) return;
+  if(!$("audio_device").value){ el.innerHTML='<span class="warn">Сначала выберите аудио-устройство (CABLE Output).</span>'; return; }
+  el.innerHTML='<span class="spinner"></span> записываю 3 сек и измеряю звук…';
+  try{
+    await api("POST","/api/automation/settings",{audio_device:$("audio_device").value});
+    const r=await api("GET","/api/automation/recorder/audio-test");
+    if(!r.ok){ el.innerHTML='<span class="warn">'+esc(r.error||"ошибка")+'</span>'; return; }
+    if(r.has_sound) el.innerHTML='<span class="ok">✓ Звук есть (макс. '+r.max_db+' дБ) — запись будет со звуком. Можно записывать.</span>';
+    else el.innerHTML='<span class="warn">✗ Тишина (макс. '+r.max_db+' дБ). Звук встречи не идёт в это устройство — настройте Windows по инструкции выше (сделайте «CABLE Input» устройством вывода и включите что-нибудь со звуком при проверке).</span>';
+  }catch(e){ el.textContent=e.message; }
 }
 async function checkLogin(){
   const el=$("login_status"); if(el) el.innerHTML='<span class="spinner"></span> проверяю вход…';
