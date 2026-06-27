@@ -44,9 +44,15 @@ _MUTE_CAM = [
     'button[aria-label*="амер"]', 'button[aria-label*="camera" i]',
     '[data-testid*="camera"]',
 ]
+# Controls that exist only while in the call (any one present = in call).
 _IN_CALL = [
-    'button[aria-label*="авершить"]', 'button[aria-label*="leave" i]',
-    'button:has-text("Завершить")', '[data-testid*="hangup"]',
+    'button:has-text("Участники")', 'button:has-text("Демонстрация")',
+    'button:has-text("Чат")', 'button:has-text("Показать всех")',
+    'button[aria-label*="частник"]', 'button[aria-label*="емонстрац"]',
+    'button[aria-label*="авершить"]', 'button[aria-label*="окинуть"]',
+    'button[aria-label*="ыйти"]', 'button[aria-label*="leave" i]',
+    'button[aria-label*="hang" i]', '[data-testid*="hangup"]',
+    'button:has-text("Завершить")', 'button:has-text("Покинуть")',
 ]
 # --- Telemost native recording controls -------------------------------------
 # Confirmed from the live UI: the bottom "•••" (More) button opens a menu whose
@@ -394,13 +400,23 @@ class TelemostBot:
         start = time.time()
         thin_since = None
         seen_others = False           # has anyone besides the bot ever appeared?
+        gone_since = None             # since when is_in_call has been False
+        # Give the call a moment to render its controls before we judge it.
+        self._page.wait_for_timeout(6000)
         while True:
             if should_stop and should_stop():
                 return "stopped"
             if time.time() - start > max_sec:
                 return "max_duration"
             if not self.is_in_call():
-                return "left_call"
+                # Don't bail on a transient miss (UI re-render); only conclude the
+                # call ended after the controls have been absent for a while.
+                gone_since = gone_since or time.time()
+                if time.time() - gone_since > 25:
+                    return "left_call"
+                time.sleep(3)
+                continue
+            gone_since = None
             n = self.participant_count()
             if n is not None:
                 if n >= 2:
