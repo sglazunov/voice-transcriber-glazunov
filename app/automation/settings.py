@@ -40,9 +40,9 @@ _DEFAULTS: dict[str, Any] = {
     "bot_join_name": "Протокол-бот",  # display name shown in Telemost
     "headless": True,
     # --- recorder (bot joins Telemost and records) ---
-    # "telemost" = press Telemost's own "Запись на компьютер" (visible to all,
-    # Telemost saves the file); "screen" = ffmpeg desktop+audio capture (fallback).
-    "record_mode": "telemost",
+    # Recording = ffmpeg screen capture (full length; no Yandex 30-min browser
+    # limit and no host-only restriction). The "telemost" native path was dropped.
+    "record_mode": "screen",
     "auth_mode": "guest",             # "guest" (link only) | "profile" (logged in)
     "browser_profile_dir": "",        # profile dir for auth_mode=profile; "" -> DATA_DIR/browser-profile
     "ffmpeg_path": "ffmpeg",          # ffmpeg binary (PATH or absolute)

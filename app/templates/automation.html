@@ -137,30 +137,14 @@
   <!-- ============ RECORDER ============ -->
   <div class="card">
     <h2>3 · Бот-рекордер (Телемост)</h2>
-    <p class="desc">Бот заходит в встречу и записывает её. Нужен Playwright + Chromium.</p>
+    <p class="desc">Бот заходит в встречу (как гость) и записывает экран на всю длину встречи (ffmpeg). Нужны Playwright, ffmpeg и виртуальное аудио — кнопки установки ниже.</p>
     <div class="grid2">
-      <div><label>Способ записи</label>
-        <select id="record_mode" onchange="recorderStatus()">
-          <option value="telemost">Запись Телемоста (видно участникам, рекомендуется)</option>
-          <option value="screen">Захват экрана ffmpeg (запасной)</option>
-        </select>
-      </div>
       <div><label>Режим входа</label>
         <select id="auth_mode">
           <option value="guest">Гость (по ссылке)</option>
-          <option value="profile">Авторизованный (вход в Яндекс)</option>
+          <option value="profile">Авторизованный (если встреча требует входа)</option>
         </select>
       </div>
-    </div>
-    <div class="note">
-      <b>«Запись Телемоста»</b> нажимает кнопку записи в самом Телемосте (участники видят запись, файл сохраняет Телемост).
-      В режиме «Запись Телемоста» бот <b>автоматически использует профиль, в который вы вошли</b> кнопкой «Войти в Яндекс» —
-      сначала войдите аккаунтом, создавшим встречу, и проверьте кнопкой «Проверить вход».<br>
-      ⚠️ <b>Важное ограничение Яндекса:</b> запись из <b>браузера</b> сохраняет только <b>первые 30 минут</b>. Встречу
-      целиком Яндекс пишет только в <b>десктоп-программе Телемоста</b> (её бот автоматизировать не может).<br>
-      <b>«Захват экрана» (ffmpeg)</b> — без лимита по времени, пишет столько, сколько идёт встреча, но нужен ffmpeg +
-      виртуальное аудио (кнопки установки появятся при выборе этого режима). Это запасной путь для встреч дольше 30 минут.</div>
-    <div class="grid2">
       <div><label>Имя бота в встрече</label><input id="bot_join_name" type="text" placeholder="Протокол-бот"></div>
     </div>
     <div class="grid2">
@@ -315,7 +299,6 @@ async function loadAll(){
   setVal("gd_folder_id", gd.folder_id);
   cloudFields();
   // recorder
-  setVal("record_mode", s.record_mode||"telemost");
   setVal("auth_mode", s.auth_mode||"guest"); setVal("bot_join_name", s.bot_join_name);
   setVal("ffmpeg_path", s.ffmpeg_path); setChk("capture_video", s.capture_video); setChk("headless", s.headless);
   setVal("min_participants", s.min_participants); setVal("end_when_alone_sec", s.end_when_alone_sec);
@@ -402,10 +385,8 @@ async function recorderStatus(){
 let _depPoll=null;
 async function renderDeps(){
   let st; try{ st=await api("GET","/api/setup/deps"); }catch{ return; }
-  // Telemost mode records itself — only Playwright is needed; ffmpeg/VB-CABLE
-  // matter only for the screen-capture fallback.
-  const mode=($("record_mode")&&$("record_mode").value)||"telemost";
-  const targets = mode==="screen" ? ["playwright","ffmpeg","audio_loopback"] : ["playwright"];
+  // Screen recording needs Playwright + ffmpeg + a loopback audio device.
+  const targets = ["playwright","ffmpeg","audio_loopback"];
   const html=[]; let polling=false;
   for(const c of targets){
     const d=st[c]; if(!d||d.ready) continue;
@@ -451,7 +432,7 @@ async function checkLogin(){
   }catch(e){ if(el) el.textContent=e.message; }
 }
 async function saveRecorder(){
-  const b={record_mode:$("record_mode").value, auth_mode:$("auth_mode").value, bot_join_name:$("bot_join_name").value||null,
+  const b={auth_mode:$("auth_mode").value, bot_join_name:$("bot_join_name").value||null,
     ffmpeg_path:$("ffmpeg_path").value||null, audio_device:$("audio_device").value||null,
     capture_video:$("capture_video").checked, headless:$("headless").checked,
     min_participants:+$("min_participants").value, end_when_alone_sec:+$("end_when_alone_sec").value,
