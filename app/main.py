@@ -575,6 +575,14 @@ def automation_recorder_audio_devices():
     return {"devices": capture.list_audio_devices(cfg.get("ffmpeg_path") or "ffmpeg")}
 
 
+@app.get("/api/automation/recorder/login-status")
+def automation_recorder_login_status():
+    """Whether the recorder profile is logged into Yandex (for the UI hint)."""
+    from .automation import settings as auto_settings
+    from .automation.recorder import browser
+    return browser.login_status(auto_settings.load())
+
+
 @app.post("/api/automation/recorder/login")
 def automation_recorder_login():
     """Open a headed browser so the user logs into Yandex once (profile mode)."""

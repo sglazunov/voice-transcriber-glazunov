@@ -69,10 +69,11 @@ def record_meeting(url: str, out_path: str, cfg: dict,
                 shot = str(Path(out_path).with_suffix(".rec-failed.png"))
                 bot.screenshot(shot)
                 return {"ok": False,
-                        "error": "Не нашёл кнопку записи в Телемосте. Запись обычно "
-                                 "доступна только организатору — войдите в Яндекс "
-                                 "(режим «профиль») аккаунтом, создавшим встречу. "
-                                 "См. скриншот.", "screenshot": shot}
+                        "error": "Не удалось включить запись (меню «•••» → «Записать "
+                                 "на компьютер»). Если бот вошёл как гость — поставьте "
+                                 "режим «Авторизованный» и войдите в Яндекс. См. "
+                                 "скриншот — пришлите его, если кнопка на нём есть.",
+                        "screenshot": shot}
             reason = bot.wait_until_end(should_stop, max_sec, alone_sec, min_p)
             log(f"Останавливаю запись Телемоста (причина: {reason}).")
             bot.stop_recording()
