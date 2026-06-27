@@ -44,6 +44,16 @@ _MUTE_CAM = [
     'button[aria-label*="амер"]', 'button[aria-label*="camera" i]',
     '[data-testid*="camera"]',
 ]
+# Buttons whose label means the device is currently ON → clicking turns it OFF.
+# (We only click these, so we never accidentally UN-mute an already-muted bot.)
+_MIC_IS_ON = [
+    'button[aria-label*="ыключить микрофон"]',   # "Выключить микрофон"
+    'button[aria-label*="ыключить звук"]', 'button[aria-label*="mute" i]',
+]
+_CAM_IS_ON = [
+    'button[aria-label*="ыключить камер"]', 'button[aria-label*="ыключить видео"]',
+    'button[aria-label*="stop video" i]', 'button[aria-label*="turn off camera" i]',
+]
 # Controls that exist only while in the call (any one present = in call).
 _IN_CALL = [
     'button:has-text("Участники")', 'button:has-text("Демонстрация")',
@@ -273,7 +283,9 @@ class TelemostBot:
         # 4) Join the call (poll up to the configured budget).
         joined = self._click_any(_JOIN_BUTTONS, overall_ms=join_budget * 1000)
         self._on_log(f"Клик по кнопке входа: {joined}")
-        self._page.wait_for_timeout(5000)
+        self._page.wait_for_timeout(6000)
+        # Make sure the bot is muted in the call (no sound goes OUT from it).
+        self.ensure_muted()
         in_call = self.is_in_call()
         self._on_log(f"В звонке: {in_call}")
         return in_call or joined
@@ -292,6 +304,20 @@ class TelemostBot:
             return t or None
         except Exception:
             return None
+
+    def ensure_muted(self) -> None:
+        """Turn the bot's mic and camera OFF (only if currently ON, so we never
+        un-mute). Prevents the bot from sending any audio/video into the call."""
+        for sels, what in ((_MIC_IS_ON, "микрофон"), (_CAM_IS_ON, "камеру")):
+            for sel in sels:
+                try:
+                    el = self._page.query_selector(sel)
+                    if el and el.is_visible():
+                        el.click()
+                        self._on_log(f"Выключил {what} бота.")
+                        break
+                except Exception:
+                    pass
 
     def is_in_call(self) -> bool:
         for sel in _IN_CALL:
