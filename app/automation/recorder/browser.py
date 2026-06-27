@@ -273,7 +273,14 @@ class TelemostBot:
         return in_call or joined
 
     def window_title(self) -> str | None:
-        """The browser window's title — used by ffmpeg to grab just this window."""
+        """The browser window's title — used by ffmpeg to grab just this window.
+
+        Brings the window to the foreground first so gdigrab captures it cleanly
+        (a fully occluded window can grab black)."""
+        try:
+            self._page.bring_to_front()
+        except Exception:
+            pass
         try:
             t = (self._page.title() or "").strip()
             return t or None
