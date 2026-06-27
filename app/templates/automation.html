@@ -168,9 +168,11 @@
       </div>
     </div>
     <div class="row">
+      <button class="ghost" onclick="recorderLogin()">Войти в Яндекс</button>
+      <button class="ghost" onclick="checkLogin()">Проверить вход</button>
       <button class="ghost" onclick="loadAudioDevices()">Обновить список устройств</button>
-      <button class="ghost" onclick="recorderLogin()">Войти в Яндекс (для режима «профиль»)</button>
     </div>
+    <div id="login_status" class="statusline"></div>
     <div class="chk"><input id="capture_video" type="checkbox"> Записывать экран (для распознавания того, что показывают)</div>
     <div class="chk"><input id="headless" type="checkbox"> Скрытый браузер (headless)</div>
 
@@ -324,7 +326,7 @@ async function loadAll(){
   setVal("rec_include", s.rec_include); setVal("rec_exclude", s.rec_exclude);
   (s.rec_days||[]).forEach(d=>{const c=document.querySelector('.recday[value="'+d+'"]'); if(c)c.checked=true;});
   // set audio device after list loads
-  cloudStatus(); recorderStatus(); refreshStatus(); loadAudioDevices(s.audio_device);
+  cloudStatus(); recorderStatus(); refreshStatus(); loadAudioDevices(s.audio_device); checkLogin();
 }
 
 /* ---- Weeek ---- */
@@ -432,8 +434,16 @@ async function loadAudioDevices(selected){
   }catch(e){}
 }
 async function recorderLogin(){
-  try{ const r=await api("POST","/api/automation/recorder/login"); toast(r.detail||"Открываю браузер…"); }
+  try{ const r=await api("POST","/api/automation/recorder/login"); toast(r.detail||"Открываю браузер…");
+    setTimeout(checkLogin, 1500); }
   catch(e){ toast(e.message,true); }
+}
+async function checkLogin(){
+  const el=$("login_status"); if(el) el.innerHTML='<span class="spinner"></span> проверяю вход…';
+  try{ const r=await api("GET","/api/automation/recorder/login-status");
+    const cls = r.logged_in===true?"ok":(r.logged_in===false?"warn":"");
+    if(el) el.innerHTML='<span class="'+cls+'">'+esc(r.detail||"")+'</span>';
+  }catch(e){ if(el) el.textContent=e.message; }
 }
 async function saveRecorder(){
   const b={record_mode:$("record_mode").value, auth_mode:$("auth_mode").value, bot_join_name:$("bot_join_name").value||null,

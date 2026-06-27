@@ -48,29 +48,32 @@ _IN_CALL = [
     'button[aria-label*="авершить"]', 'button[aria-label*="leave" i]',
     'button:has-text("Завершить")', '[data-testid*="hangup"]',
 ]
-# --- Telemost native recording controls (best-effort; tuned vs the live UI) ---
-_REC_OPEN = [  # open the record control or the "Ещё/More" menu that holds it
-    'button[aria-label*="апись"]', 'button[aria-label*="record" i]',
-    'button:has-text("Запись")', 'button:has-text("Записать")',
-    '[data-testid*="record"]', 'button[aria-label*="Ещё"]',
-    'button[aria-label*="More" i]', '[data-testid*="more"]',
-    'button[aria-label*="ополнительно"]',
+# --- Telemost native recording controls -------------------------------------
+# Confirmed from the live UI: the bottom "•••" (More) button opens a menu whose
+# first item is «Записать на компьютер»; while recording it becomes «Остановить
+# запись».
+_REC_MORE = [  # the bottom-bar "•••" (More) button that holds the record item
+    'button[aria-label="Ещё"]', 'button[aria-label*="Ещё"]',
+    'button[aria-label*="ещё"]', 'button[aria-label*="Дополнит"]',
+    'button[aria-label*="More" i]', 'button[aria-label*="menu" i]',
+    'button[aria-haspopup="menu"]', '[data-testid*="more"]',
+    '[data-testid*="menu-button"]', 'button:has-text("•••")', 'button:has-text("…")',
 ]
-_REC_START = [  # the actual "record to computer" option
-    'text=Запись на компьютер', 'text=Записать на компьютер',
-    'text=Сохранить на компьютер', 'button:has-text("На компьютер")',
-    'text=Начать запись', 'button:has-text("Начать запись")',
-    'button:has-text("Записать встречу")', 'text=Запись на устройство',
+_REC_START = [  # the «Записать на компьютер» menu item
+    '[role="menuitem"]:has-text("Записать на компьютер")',
+    'text="Записать на компьютер"', 'text=Записать на компьютер',
+    'button:has-text("Записать на компьютер")',
+    'text=Запись на компьютер', 'text=Сохранить на компьютер',
 ]
-_REC_CONFIRM = [  # a possible confirmation dialog
-    'button:has-text("Начать")', 'button:has-text("Записать")',
-    'button:has-text("Продолжить")', 'button:has-text("Ок")',
+_REC_CONFIRM = [  # an optional confirmation dialog
+    'button:has-text("Начать запись")', 'button:has-text("Записать")',
+    'button:has-text("Начать")', 'button:has-text("Продолжить")',
     'button:has-text("Понятно")',
 ]
 _REC_STOP = [
-    'button:has-text("Остановить запись")', 'text=Остановить запись',
-    'button:has-text("Завершить запись")', 'text=Завершить запись',
-    'button[aria-label*="становить запись"]', 'button:has-text("Остановить")',
+    '[role="menuitem"]:has-text("Остановить запись")',
+    'text="Остановить запись"', 'text=Остановить запись',
+    'button:has-text("Остановить запись")', 'text=Завершить запись',
 ]
 # Launch args: auto-accept mic/cam prompts; fake mic so we never send real audio.
 _LAUNCH_ARGS = [
@@ -103,6 +106,42 @@ def readiness(cfg: dict) -> dict:
                               "через кнопку «Войти в Яндекс»."}
         return {"ready": True, "mode": mode, "detail": f"Профиль: {prof}"}
     return {"ready": True, "mode": mode, "detail": "Режим: гость (по ссылке)."}
+
+
+def login_status(cfg: dict) -> dict:
+    """Check whether the recorder profile is actually logged into Yandex.
+
+    Loads passport.yandex.ru/profile in a headless copy of the profile: if it
+    stays on /profile the session is valid; if it redirects to /auth it isn't."""
+    if (cfg.get("auth_mode") or "guest") != "profile":
+        return {"logged_in": None,
+                "detail": "Режим входа — «Гость»: вход в Яндекс не используется. "
+                          "Для записи Телемоста переключите на «Авторизованный»."}
+    if not playwright_available():
+        return {"logged_in": None, "detail": "Playwright не установлен."}
+    try:
+        from playwright.sync_api import sync_playwright
+        user_dir = str(_profile_dir(cfg))
+        with sync_playwright() as pw:
+            ctx = pw.chromium.launch_persistent_context(
+                user_dir, headless=True, args=_LAUNCH_ARGS)
+            page = ctx.pages[0] if ctx.pages else ctx.new_page()
+            page.goto("https://passport.yandex.ru/profile",
+                      wait_until="domcontentloaded", timeout=20000)
+            page.wait_for_timeout(2500)
+            url = page.url
+            try:
+                ctx.close()
+            except Exception:
+                pass
+        logged = "/auth" not in url
+        return {"logged_in": logged,
+                "detail": ("Вход в Яндекс выполнен ✓ — бот будет писать как этот аккаунт."
+                           if logged else
+                           "Не вошли в Яндекс. Нажмите «Войти в Яндекс» и авторизуйтесь "
+                           "аккаунтом, создавшим встречу.")}
+    except Exception as e:  # noqa: BLE001
+        return {"logged_in": None, "detail": f"Не удалось проверить вход: {e}"}
 
 
 def _profile_dir(cfg: dict) -> Path:
@@ -238,33 +277,61 @@ class TelemostBot:
                 continue
         return False
 
-    def start_recording(self, out_path: str) -> bool:
-        """Press Telemost's «Запись → на компьютер». Returns True if it started.
+    def _open_more_and_click(self, item_selectors, overall_ms: int = 12000) -> bool:
+        """Open the bottom «•••» menu and click one of `item_selectors`.
 
-        Recording is normally available only to the meeting's host, so the bot
-        must be logged in (auth_mode=profile) as the account that created the
-        meeting. Selectors are best-effort against the live Telemost UI."""
+        Polls so it works whether the menu is already open or needs opening, and
+        whether the «•••» button has an aria-label we recognise."""
+        deadline = time.time() + overall_ms / 1000
+        while time.time() < deadline and not self._aborted():
+            # menu already open?
+            for sel in item_selectors:
+                try:
+                    el = self._page.query_selector(sel)
+                    if el and el.is_visible():
+                        el.click()
+                        return True
+                except Exception:
+                    pass
+            # open a "•••" candidate, then look for the item
+            for msel in _REC_MORE:
+                try:
+                    mb = self._page.query_selector(msel)
+                    if mb and mb.is_visible():
+                        mb.click()
+                        self._page.wait_for_timeout(600)
+                        for sel in item_selectors:
+                            it = self._page.query_selector(sel)
+                            if it and it.is_visible():
+                                it.click()
+                                return True
+                        # close the menu (Esc) so the next candidate is clean
+                        try:
+                            self._page.keyboard.press("Escape")
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+            self._page.wait_for_timeout(500)
+        return False
+
+    def start_recording(self, out_path: str) -> bool:
+        """Open «•••» → «Записать на компьютер». Returns True if it started."""
         self._out_path = out_path
         self._download_path = None
-        # Open a "more"/record menu if the record control is hidden behind one.
-        self._click_any(_REC_OPEN, overall_ms=4000)
-        self._page.wait_for_timeout(800)
-        started = self._click_any(_REC_START, overall_ms=6000)
-        if not started:
-            # Maybe the record button starts recording directly (no submenu).
-            started = self._click_any(_REC_OPEN, overall_ms=3000)
-        self._page.wait_for_timeout(1500)
-        # Confirm a possible "Запись на компьютер" dialog / consent.
-        self._click_any(_REC_CONFIRM, overall_ms=3000)
-        self._on_log(f"Запуск записи Телемоста: {started}")
+        started = self._open_more_and_click(_REC_START, overall_ms=15000)
+        if started:
+            self._page.wait_for_timeout(1200)
+            self._click_any(_REC_CONFIRM, overall_ms=2500)  # optional dialog
+            self._on_log("Запись Телемоста запущена.")
+        else:
+            self._on_log("Не нашёл пункт «Записать на компьютер».")
         return started
 
     def stop_recording(self) -> None:
-        """Press Telemost's «Остановить запись» so it finalises and saves."""
+        """Open «•••» → «Остановить запись» so Telemost finalises & saves."""
         try:
-            self._click_any(_REC_OPEN, overall_ms=3000)
-            self._page.wait_for_timeout(500)
-            stopped = self._click_any(_REC_STOP, overall_ms=5000)
+            stopped = self._open_more_and_click(_REC_STOP, overall_ms=8000)
             self._click_any(_REC_CONFIRM, overall_ms=2000)  # confirm "завершить"
             self._on_log(f"Остановка записи Телемоста: {stopped}")
         except Exception as e:  # noqa: BLE001
