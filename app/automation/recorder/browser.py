@@ -168,6 +168,10 @@ class TelemostBot:
         headless = self.cfg.get("headless", True) if headless is None else headless
         mode = self.cfg.get("auth_mode") or "guest"
         record_mode = self.cfg.get("record_mode") or "telemost"
+        # Screen capture needs a real on-screen window for ffmpeg to grab — never
+        # headless in that mode (headless has no window → it would grab the desktop).
+        if record_mode == "screen":
+            headless = False
         # Telemost native recording requires being logged in, so that mode always
         # uses the logged-in profile (same dir as «Войти в Яндекс») — otherwise the
         # bot joins as a guest and has no record button.
@@ -272,6 +276,14 @@ class TelemostBot:
         in_call = self.is_in_call()
         self._on_log(f"В звонке: {in_call}")
         return in_call or joined
+
+    def window_title(self) -> str | None:
+        """The browser window's title — used by ffmpeg to grab just this window."""
+        try:
+            t = (self._page.title() or "").strip()
+            return t or None
+        except Exception:
+            return None
 
     def is_in_call(self) -> bool:
         for sel in _IN_CALL:

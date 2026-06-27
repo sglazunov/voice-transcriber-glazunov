@@ -86,9 +86,10 @@ def record_meeting(url: str, out_path: str, cfg: dict,
             return {"ok": True, "path": path, "reason": reason,
                     "size": Path(path).stat().st_size}
 
-        # ---- screen / ffmpeg fallback ----
-        rec = capture.FFmpegRecorder(out_path, cfg, on_log=log)
-        log("В звонке — начинаю захват экрана (ffmpeg).")
+        # ---- screen / ffmpeg fallback (records the meeting's browser window) ----
+        title = bot.window_title()
+        rec = capture.FFmpegRecorder(out_path, cfg, on_log=log, window_title=title)
+        log(f"В звонке — пишу окно браузера «{title or 'весь экран'}» (ffmpeg).")
         rec.start()
         reason = bot.wait_until_end(should_stop, max_sec, alone_sec, min_p)
         log(f"Останавливаю запись (причина: {reason}).")
