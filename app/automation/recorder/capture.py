@@ -61,11 +61,11 @@ def _parse_dshow_audio(stderr: str) -> list[str]:
     return names
 
 
-def build_ffmpeg_cmd(out_path: str, cfg: dict) -> list[str]:
+def build_ffmpeg_cmd(out_path: str, cfg: dict, window_title: str | None = None) -> list[str]:
     """Build the ffmpeg capture command from settings.
 
-    Records desktop video (if capture_video) and the configured audio device
-    into a single mp4. Audio-only falls back to .m4a-style aac in mp4.
+    Records video (just the browser window if `window_title` is given, else the
+    whole desktop) and the configured audio device into one mp4.
     """
     ffmpeg = cfg.get("ffmpeg_path") or "ffmpeg"
     audio = (cfg.get("audio_device") or "").strip()
@@ -73,7 +73,10 @@ def build_ffmpeg_cmd(out_path: str, cfg: dict) -> list[str]:
 
     cmd = [ffmpeg, "-y", "-hide_banner"]
     if capture_video:
-        cmd += ["-f", "gdigrab", "-framerate", "10", "-i", "desktop"]
+        # Capture only the meeting's browser window (cleaner than the whole
+        # desktop); fall back to the full desktop if no title is known.
+        src = f"title={window_title}" if window_title else "desktop"
+        cmd += ["-f", "gdigrab", "-framerate", "10", "-i", src]
     if audio:
         cmd += ["-f", "dshow", "-i", f"audio={audio}"]
     if capture_video:
@@ -111,14 +114,15 @@ def readiness(cfg: dict) -> dict:
 class FFmpegRecorder:
     """Start/stop an ffmpeg capture, finalising the file cleanly on stop."""
 
-    def __init__(self, out_path: str, cfg: dict, on_log=None):
+    def __init__(self, out_path: str, cfg: dict, on_log=None, window_title=None):
         self.out_path = out_path
         self.cfg = cfg
         self._on_log = on_log or (lambda *_: None)
         self._proc: subprocess.Popen | None = None
+        self.window_title = window_title
 
     def start(self) -> None:
-        cmd = build_ffmpeg_cmd(self.out_path, self.cfg)
+        cmd = build_ffmpeg_cmd(self.out_path, self.cfg, self.window_title)
         self._on_log("ffmpeg: " + " ".join(cmd))
         self._proc = subprocess.Popen(
             cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
