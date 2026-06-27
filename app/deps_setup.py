@@ -23,6 +23,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 
 _NOWINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
@@ -237,19 +238,37 @@ def _do_install(c: str) -> None:
                 _set(c, "error", "Не нашёл установщик VB-CABLE в архиве. "
                      "Установите вручную с vb-audio.com/Cable.", ok=False)
                 return
-            _set(c, "running", "Запускаю установщик драйвера — подтвердите запрос Windows (UAC)…")
+            _set(c, "running", "Запускаю установщик драйвера ОТ ИМЕНИ АДМИНИСТРАТОРА — "
+                 "подтвердите запрос Windows (UAC), затем нажмите Install в окне VB-CABLE…")
+            # The VB-CABLE driver writes to the registry → needs admin. ShellExecute
+            # with the "runas" verb triggers the UAC elevation prompt.
+            elevated = False
             try:
-                _run([setup, "-i"], 600)  # -i = silent install; the driver asks for UAC
+                import ctypes
+                rc = ctypes.windll.shell32.ShellExecuteW(None, "runas", setup, "-i",
+                                                         os.path.dirname(setup), 1)
+                elevated = int(rc) > 32  # >32 = launched (user accepted UAC)
             except Exception:
-                pass
+                elevated = False
+            if not elevated:
+                _set(c, "error", "Нужны права администратора (вы отклонили запрос UAC?). "
+                     "Откройте папку " + tmp + " и запустите VBCABLE_Setup_x64.exe правой "
+                     "кнопкой → «Запуск от имени администратора» → Install.", ok=False)
+                return
+            # Wait a bit for the driver to register (or a reboot to be needed).
+            for _ in range(40):
+                if _loopback_device_present():
+                    break
+                time.sleep(1)
             if _loopback_device_present():
-                _set(c, "done", "Готово — устройство VB-CABLE установлено. "
-                     "Выберите «CABLE Output» в списке аудио-устройств.", ok=True)
+                _set(c, "done", "Готово — VB-CABLE установлен. Дальше: сделайте «CABLE Input» "
+                     "устройством вывода по умолчанию (Windows → Звук), и выберите "
+                     "«CABLE Output» в списке аудио-устройств здесь.", ok=True)
             else:
-                _set(c, "done", "Установщик VB-CABLE запущен. Скорее всего нужна "
-                     "ПЕРЕЗАГРУЗКА. После неё: 1) сделайте «CABLE Input» устройством "
-                     "вывода по умолчанию (чтобы звук встречи шёл в кабель), "
-                     "2) выберите «CABLE Output» в списке аудио-устройств здесь.", ok=True)
+                _set(c, "done", "Установщик VB-CABLE запущен с правами админа. Если устройство "
+                     "не появилось — закончите установку в его окне (Install) и, скорее всего, "
+                     "ПЕРЕЗАГРУЗИТЕ компьютер. После: «CABLE Input» — устройство вывода по "
+                     "умолчанию, «CABLE Output» — выберите здесь.", ok=True)
     except subprocess.TimeoutExpired:
         _set(c, "error", "Превышено время установки. Попробуйте ещё раз.", ok=False)
     except Exception as e:  # noqa: BLE001
