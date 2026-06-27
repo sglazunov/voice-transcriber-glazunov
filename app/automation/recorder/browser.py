@@ -165,17 +165,12 @@ class TelemostBot:
     def _launch(self, headless: bool | None = None):
         from playwright.sync_api import sync_playwright
         self._pw = sync_playwright().start()
-        headless = self.cfg.get("headless", True) if headless is None else headless
+        # Screen capture needs a real on-screen window for ffmpeg to grab, so the
+        # recording browser is never headless (the explicit param still wins, e.g.
+        # the login helper).
+        headless = False if headless is None else headless
         mode = self.cfg.get("auth_mode") or "guest"
-        record_mode = self.cfg.get("record_mode") or "telemost"
-        # Screen capture needs a real on-screen window for ffmpeg to grab — never
-        # headless in that mode (headless has no window → it would grab the desktop).
-        if record_mode == "screen":
-            headless = False
-        # Telemost native recording requires being logged in, so that mode always
-        # uses the logged-in profile (same dir as «Войти в Яндекс») — otherwise the
-        # bot joins as a guest and has no record button.
-        use_profile = (mode == "profile") or (record_mode == "telemost")
+        use_profile = (mode == "profile")
         # Persistent context so a logged-in profile (and media perms) survive.
         user_dir = str(_profile_dir(self.cfg) if use_profile
                        else _profile_dir(self.cfg).parent / "browser-guest")
