@@ -167,8 +167,13 @@ class TelemostBot:
         self._pw = sync_playwright().start()
         headless = self.cfg.get("headless", True) if headless is None else headless
         mode = self.cfg.get("auth_mode") or "guest"
+        record_mode = self.cfg.get("record_mode") or "telemost"
+        # Telemost native recording requires being logged in, so that mode always
+        # uses the logged-in profile (same dir as «Войти в Яндекс») — otherwise the
+        # bot joins as a guest and has no record button.
+        use_profile = (mode == "profile") or (record_mode == "telemost")
         # Persistent context so a logged-in profile (and media perms) survive.
-        user_dir = str(_profile_dir(self.cfg) if mode == "profile"
+        user_dir = str(_profile_dir(self.cfg) if use_profile
                        else _profile_dir(self.cfg).parent / "browser-guest")
         Path(user_dir).mkdir(parents=True, exist_ok=True)
         self._ctx = self._pw.chromium.launch_persistent_context(
