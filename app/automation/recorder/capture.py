@@ -61,6 +61,35 @@ def _parse_dshow_audio(stderr: str) -> list[str]:
     return names
 
 
+def test_audio_level(ffmpeg: str, device: str, seconds: int = 3) -> dict:
+    """Record `seconds` from `device` and measure its volume (silence detector).
+
+    Lets the UI tell the user whether the meeting's sound actually reaches the
+    chosen device, instead of finding out only after a recording came out mute.
+    """
+    if not device:
+        return {"ok": False, "error": "Не выбрано аудио-устройство."}
+    try:
+        proc = subprocess.run(
+            [ffmpeg, "-hide_banner", "-f", "dshow", "-i", f"audio={device}",
+             "-t", str(seconds), "-af", "volumedetect", "-f", "null", "-"],
+            capture_output=True, text=True, errors="replace", timeout=seconds + 25)
+    except FileNotFoundError:
+        return {"ok": False, "error": "ffmpeg не найден."}
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "error": "Таймаут проверки."}
+    err = proc.stderr or ""
+    m_mean = re.search(r"mean_volume:\s*(-?[\d.]+) dB", err)
+    m_max = re.search(r"max_volume:\s*(-?[\d.]+) dB", err)
+    max_db = float(m_max.group(1)) if m_max else None
+    mean_db = float(m_mean.group(1)) if m_mean else None
+    if max_db is None:
+        return {"ok": False, "error": "Не удалось открыть устройство: "
+                + " ".join(err.strip().splitlines()[-2:])[:200]}
+    has_sound = max_db > -80.0
+    return {"ok": True, "has_sound": has_sound, "max_db": max_db, "mean_db": mean_db}
+
+
 def build_ffmpeg_cmd(out_path: str, cfg: dict, window_title: str | None = None) -> list[str]:
     """Build the ffmpeg capture command from settings.
 

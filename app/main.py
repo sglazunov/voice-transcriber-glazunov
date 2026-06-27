@@ -583,6 +583,17 @@ def automation_recorder_login_status():
     return browser.login_status(auto_settings.load())
 
 
+@app.get("/api/automation/recorder/audio-test")
+def automation_recorder_audio_test():
+    """Record a few seconds from the chosen audio device and report its level —
+    so the user can verify the meeting's sound actually reaches it."""
+    from .automation import settings as auto_settings
+    from .automation.recorder import capture
+    cfg = auto_settings.load()
+    return capture.test_audio_level(cfg.get("ffmpeg_path") or "ffmpeg",
+                                    (cfg.get("audio_device") or "").strip())
+
+
 @app.post("/api/automation/recorder/login")
 def automation_recorder_login():
     """Open a headed browser so the user logs into Yandex once (profile mode)."""
