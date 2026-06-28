@@ -179,9 +179,14 @@ class Scheduler:
             self._stop_recording.clear()  # fresh manual-stop flag per recording
 
             def log(msg: str) -> None:
-                st.logs.append(str(msg))
+                msg = str(msg)
+                st.logs.append(msg)
+                # Surface live progress on the card instead of a frozen
+                # "joining…" line (skip the very verbose ffmpeg command dump).
+                if not msg.startswith("ffmpeg:"):
+                    self._set(st, "recording", msg)
 
-            self._set(st, "recording", "Бот заходит и записывает встречу…")
+            self._set(st, "recording", "Бот заходит на встречу…")
             stamp = time.strftime("%Y%m%d-%H%M%S")
             safe = "".join(c for c in str(st.title) if c.isalnum() or c in " -_")[:40].strip()
             rec_dir = config.DATA_DIR / "recordings"

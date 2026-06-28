@@ -283,12 +283,14 @@ class TelemostBot:
 
         # 4) Join the call (poll up to the configured budget).
         joined = self._click_any(_JOIN_BUTTONS, overall_ms=join_budget * 1000)
-        self._on_log(f"Клик по кнопке входа: {joined}")
+        self._on_log("Нажал кнопку входа, подключаюсь…" if joined
+                     else "Кнопку входа не нашёл — возможно, уже в звонке.")
         self._page.wait_for_timeout(6000)
         # Make sure the bot is muted in the call (no sound goes OUT from it).
         self.ensure_muted()
         in_call = self.is_in_call()
-        self._on_log(f"В звонке: {in_call}")
+        self._on_log("Бот в звонке ✓" if in_call
+                     else "Не вижу элементов звонка — проверяю ещё раз…")
         return in_call or joined
 
     def window_title(self) -> str | None:
