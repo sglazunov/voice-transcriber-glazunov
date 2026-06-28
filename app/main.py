@@ -634,6 +634,20 @@ def automation_recorder_test(body: RecorderTest):
     return res
 
 
+@app.get("/api/automation/weeek/projects")
+def automation_weeek_projects():
+    """List the workspace's projects (id + name) so the user can pick which one
+    to record. The token sees all projects; `projectId` is what scopes it."""
+    from .automation import settings as auto_settings, weeek
+    token = auto_settings.get("weeek_token")
+    if not token:
+        raise HTTPException(400, "Сначала задайте токен Weeek и нажмите «Сохранить».")
+    try:
+        return {"projects": weeek.list_projects(token)}
+    except weeek.WeeekError as e:
+        raise HTTPException(502, str(e))
+
+
 @app.get("/api/automation/weeek/probe")
 def automation_weeek_probe(task_id: str):
     """Return the raw JSON of one Weeek task — used to pin date/link field names."""
