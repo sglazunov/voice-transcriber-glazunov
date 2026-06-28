@@ -12,6 +12,8 @@ Playwright is imported lazily so the rest of the app runs without it.
 from __future__ import annotations
 
 import re
+import shutil
+import tempfile
 import time
 from pathlib import Path
 
@@ -177,6 +179,7 @@ class TelemostBot:
         self._pw = None
         self._ctx = None
         self._page = None
+        self._temp_profile = None
 
     # -- lifecycle ----------------------------------------------------------
     def _launch(self, headless: bool | None = None):
@@ -188,10 +191,23 @@ class TelemostBot:
         headless = False if headless is None else headless
         mode = self.cfg.get("auth_mode") or "guest"
         use_profile = (mode == "profile")
-        # Persistent context so a logged-in profile (and media perms) survive.
-        user_dir = str(_profile_dir(self.cfg) if use_profile
-                       else _profile_dir(self.cfg).parent / "browser-guest")
-        Path(user_dir).mkdir(parents=True, exist_ok=True)
+        # Guest mode keeps no state, so use a FRESH temp profile per run. A fixed
+        # dir gets a Chromium "singleton" lock: if a previous bot window is still
+        # open (e.g. a meeting that didn't end cleanly), Chrome hands off to it and
+        # the new process exits → "Target page/browser has been closed". A unique
+        # dir sidesteps that entirely. The authenticated profile must persist, so
+        # there we just clear any stale lock left by a crashed run.
+        if use_profile:
+            user_dir = str(_profile_dir(self.cfg))
+            Path(user_dir).mkdir(parents=True, exist_ok=True)
+            for lock in ("SingletonLock", "SingletonCookie", "SingletonSocket"):
+                try:
+                    (Path(user_dir) / lock).unlink()
+                except OSError:
+                    pass
+        else:
+            user_dir = tempfile.mkdtemp(prefix="tm-guest-")
+            self._temp_profile = user_dir
         self._ctx = self._pw.chromium.launch_persistent_context(
             user_dir, headless=headless, args=_LAUNCH_ARGS,
             permissions=["microphone", "camera"],
@@ -507,6 +523,10 @@ class TelemostBot:
             except Exception:
                 pass
         self._ctx = self._page = self._pw = None
+        # Drop the throwaway guest profile so temp dirs don't pile up.
+        if self._temp_profile:
+            shutil.rmtree(self._temp_profile, ignore_errors=True)
+            self._temp_profile = None
 
 
 def login(cfg: dict, on_log=None) -> None:
