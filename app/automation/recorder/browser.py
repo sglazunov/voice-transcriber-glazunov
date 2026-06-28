@@ -11,6 +11,7 @@ Playwright is imported lazily so the rest of the app runs without it.
 """
 from __future__ import annotations
 
+import re
 import time
 from pathlib import Path
 
@@ -398,15 +399,43 @@ class TelemostBot:
         return self._download_path
 
     def participant_count(self) -> int | None:
-        """Best-effort count of participants (None if it can't be read)."""
-        for sel in ['[data-testid*="participants"]', '[class*="participant"]']:
+        """Best-effort count of participants (None if it can't be read).
+
+        Telemost shows the count on the bottom «Участники» button (e.g. the badge
+        reads "1" when only the bot is in the room). We read that number from the
+        button's text / aria-label rather than counting DOM tiles, which the old
+        selectors never matched."""
+        for sel in ('button:has-text("Участники")', 'button:has-text("Participants")',
+                    'button[aria-label*="частник"]', 'button[aria-label*="articipant" i]'):
             try:
-                els = self._page.query_selector_all(sel)
-                if els:
-                    return len(els)
+                el = self._page.query_selector(sel)
+                if not el:
+                    continue
+                txt = ((el.inner_text() or "") + " "
+                       + (el.get_attribute("aria-label") or ""))
+                m = re.search(r"\d+", txt)
+                if m:
+                    return int(m.group())
             except Exception:
                 continue
         return None
+
+    # When the bot is the only one in the room, Telemost replaces the participant
+    # tiles with an invite prompt ("отправьте им ссылку…"). A reliable "alone"
+    # signal that doesn't depend on reading a number.
+    _ALONE_HINTS = (
+        'text=пригласить других участников', 'text=отправьте им ссылку',
+        'text=invite', 'text=Share the link',
+    )
+
+    def alone_screen(self) -> bool:
+        for sel in self._ALONE_HINTS:
+            try:
+                if self._page.query_selector(sel):
+                    return True
+            except Exception:
+                continue
+        return False
 
     def screenshot(self, path: str) -> None:
         try:
@@ -427,6 +456,8 @@ class TelemostBot:
         thin_since = None
         seen_others = False           # has anyone besides the bot ever appeared?
         gone_since = None             # since when is_in_call has been False
+        # If nobody ever joins, don't sit for the full max_sec — leave after this.
+        never_joined_sec = int(self.cfg.get("end_if_nobody_joins_sec", 300))
         # Give the call a moment to render its controls before we judge it.
         self._page.wait_for_timeout(6000)
         while True:
@@ -443,16 +474,27 @@ class TelemostBot:
                 time.sleep(3)
                 continue
             gone_since = None
+
+            # Two independent "am I alone?" signals: the «Участники» count and the
+            # invite-prompt screen Telemost shows when the bot is by itself.
             n = self.participant_count()
-            if n is not None:
-                if n >= 2:
-                    seen_others = True
-                if seen_others and n <= max(1, min_participants):
-                    thin_since = thin_since or time.time()
-                    if time.time() - thin_since > alone_sec:
-                        return "thinned_out"
-                else:
-                    thin_since = None
+            alone = self.alone_screen()
+            # Someone else is present if the count says 2+, or the invite prompt is
+            # gone (a participant tile replaced it) while we could read no number.
+            if (n is not None and n >= 2) or (n is None and not alone):
+                seen_others = True
+            is_alone = alone or (n is not None and n <= max(1, min_participants))
+
+            if is_alone:
+                thin_since = thin_since or time.time()
+                alone_for = time.time() - thin_since
+                # Others were here and left → end soon. Nobody ever joined → wait a
+                # bit longer (host may be late) before giving up.
+                limit = alone_sec if seen_others else max(alone_sec, never_joined_sec)
+                if alone_for > limit:
+                    return "thinned_out" if seen_others else "nobody_joined"
+            else:
+                thin_since = None
             time.sleep(5)
 
     def close(self) -> None:
