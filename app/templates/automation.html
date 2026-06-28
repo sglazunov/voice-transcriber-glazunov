@@ -86,13 +86,16 @@
     <label>API-токен Weeek</label>
     <input id="weeek_token" type="password" placeholder="вставьте токен">
     <div class="grid2">
-      <div><label>ID проекта (необязательно)</label><input id="weeek_project_id" type="text" placeholder="например 2"></div>
+      <div><label>ID проекта (необязательно)</label><input id="weeek_project_id" type="text" placeholder="пусто = все проекты"></div>
       <div><label>Часовой пояс</label><input id="timezone" type="text" placeholder="Europe/Moscow"></div>
     </div>
+    <div class="note">Токен видит <b>все</b> проекты воркспейса. Чтобы писать встречи только одного проекта — впишите его ID (или нажмите «Мои проекты» и выберите). Пусто = пишутся все проекты.</div>
     <div class="row">
       <button class="go" onclick="saveWeeek()">Сохранить</button>
+      <button class="ghost" onclick="loadProjects()">Мои проекты</button>
       <button class="ghost" onclick="loadMeetings()">Показать ближайшие встречи</button>
     </div>
+    <div id="projects" class="mlist"></div>
     <div id="weeek_status" class="statusline"></div>
     <div id="meetings" class="mlist"></div>
   </div>
@@ -353,6 +356,23 @@ async function loadMeetings(){
         <div class="s">${m.start?fmt(m.start):"без времени"} · <a href="${m.url}" target="_blank">ссылка</a></div></div>
         <button class="ghost" onclick="runNow('${m.task_id}')">Записать сейчас</button></div>`).join("");
   }catch(e){ $("weeek_status").innerHTML="<span class='bad'>"+esc(e.message)+"</span>"; }
+}
+async function loadProjects(){
+  $("weeek_status").innerHTML="загрузка проектов…";
+  try{
+    const d=await api("GET","/api/automation/weeek/projects");
+    $("weeek_status").innerHTML = d.projects.length? "Нажмите «Выбрать», чтобы писать встречи только этого проекта:":"<span class='warn'>проекты не найдены</span>";
+    $("projects").innerHTML=d.projects.map(p=>`
+      <div class="mrow"><div><div class="t">${esc(p.name)}</div>
+        <div class="s">ID: <code>${esc(String(p.id))}</code></div></div>
+        <button class="ghost" onclick="pickProject('${esc(String(p.id))}')">Выбрать</button></div>`).join("");
+  }catch(e){ $("weeek_status").innerHTML="<span class='bad'>"+esc(e.message)+"</span>"; }
+}
+async function pickProject(id){
+  $("weeek_project_id").value=id;
+  try{ await api("POST","/api/automation/settings", {weeek_project_id:id});
+    toast("Проект выбран (ID "+id+") — пишутся только его встречи"); $("projects").innerHTML="";
+  }catch(e){ toast(e.message,true); }
 }
 
 /* ---- Cloud ---- */
