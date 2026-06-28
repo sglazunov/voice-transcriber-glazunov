@@ -65,18 +65,23 @@ def upload(file_path: str, name: str, cfg: dict) -> dict:
         if not href:
             raise CloudError(f"Яндекс.Диск не дал ссылку на загрузку: {info}")
 
-        put_status, _ = request("PUT", href, data=src.read_bytes())
+        # Big recordings take a while — give the upload a generous timeout.
+        put_status, _ = request("PUT", href, data=src.read_bytes(), timeout=1800)
         if put_status not in (201, 202):
             raise CloudError(f"Загрузка не удалась (HTTP {put_status}).")
 
-        # Publish for a shareable link (best effort).
+        # The file is safely uploaded now. Getting a public link is best-effort:
+        # a timeout/error here must NOT fail the whole job (the recording is saved).
         url = None
-        pub_status, _ = request("PUT", f"{API}/resources/publish",
-                                headers=headers, params={"path": remote})
-        if pub_status in (200, 201):
-            _, meta = request_json("GET", f"{API}/resources",
-                                   headers=headers, params={"path": remote})
-            url = (meta or {}).get("public_url")
+        try:
+            pub_status, _ = request("PUT", f"{API}/resources/publish",
+                                    headers=headers, params={"path": remote})
+            if pub_status in (200, 201):
+                _, meta = request_json("GET", f"{API}/resources",
+                                       headers=headers, params={"path": remote})
+                url = (meta or {}).get("public_url")
+        except CloudError:
+            pass  # no shareable link, but the file is on the Disk
         return {"ok": True, "backend": "yandex_disk",
                 "url": url or remote, "path": remote}
     except CloudError as e:

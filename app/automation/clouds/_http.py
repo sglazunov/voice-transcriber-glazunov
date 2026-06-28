@@ -30,7 +30,11 @@ def request(method: str, url: str, *, headers: dict | None = None,
     except urllib.error.HTTPError as e:
         return e.code, e.read()
     except urllib.error.URLError as e:
+        # A read timeout surfaces as URLError(reason=timeout) or a bare
+        # TimeoutError; treat both as a transport error, not a crash.
         raise CloudError(f"Сеть недоступна: {e.reason}") from e
+    except (TimeoutError, OSError) as e:
+        raise CloudError(f"Таймаут/сетевая ошибка: {e}") from e
 
 
 def request_json(method: str, url: str, **kw) -> tuple[int, Any]:
