@@ -80,6 +80,8 @@ def _request(method: str, path: str, token: str,
         raise WeeekError(f"Weeek API {e.code}: {detail}") from e
     except urllib.error.URLError as e:
         raise WeeekError(f"Не удалось подключиться к Weeek: {e.reason}") from e
+    except (TimeoutError, OSError) as e:
+        raise WeeekError(f"Таймаут/сетевая ошибка Weeek: {e}") from e
     try:
         out = json.loads(payload)
     except ValueError as e:
