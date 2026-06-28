@@ -56,11 +56,13 @@ class Scheduler:
         self._stop = threading.Event()
         self._stop_recording = threading.Event()  # manual "stop current recording"
         self._last_poll = 0.0
+        self._boot_time = 0.0  # session start; meetings older than this are missed
 
     # -- lifecycle ----------------------------------------------------------
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
             return
+        self._boot_time = time.time()  # don't auto-join meetings already past now
         self._stop.clear()
         self._thread = threading.Thread(target=self._loop, daemon=True,
                                         name="vtx-scheduler")
@@ -154,6 +156,12 @@ class Scheduler:
                 if st.state != "scheduled" or st.start is None:
                     continue
                 start = st.start.timestamp()
+                # Don't auto-join a meeting that was already past when the app
+                # started this session (e.g. a stale meeting after a restart) —
+                # only record meetings that come due while we're running.
+                if start < self._boot_time:
+                    st.state, st.detail = "missed", "Началась до запуска приложения — пропущено."
+                    continue
                 if now < start - lookahead:
                     continue  # not yet
                 if now > start + _LATE_GRACE_SEC:
