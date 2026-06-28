@@ -166,12 +166,22 @@ class Scheduler:
                 candidates.append((start, st))
         if candidates:
             candidates.sort(key=lambda x: x[0])  # earliest-starting first
-            threading.Thread(target=self._run, args=(candidates[0][1],),
-                             daemon=True).start()
+            chosen = candidates[0][1]
+            # Claim it atomically: flip "scheduled" -> "recording" under the lock
+            # BEFORE spawning the worker, so the next tick (and the poller) see it
+            # is taken and never start a second browser for the same meeting.
+            with self._lock:
+                if chosen.state != "scheduled":
+                    return
+                chosen.state, chosen.detail = "recording", "Бот заходит на встречу…"
+            threading.Thread(target=self._run, args=(chosen,), daemon=True).start()
 
     # -- per-meeting pipeline ----------------------------------------------
     def _run(self, st: MeetingState) -> None:
         if not self._recording.acquire(blocking=False):
+            # Another recording is in progress; release our claim so this meeting
+            # can be retried on a later tick instead of getting stuck "recording".
+            self._set(st, "scheduled", "")
             return
         try:
             from . import recorder
@@ -271,7 +281,9 @@ class Scheduler:
             return {"ok": False, "error": "Встреча не найдена (сначала опрос Weeek)."}
         if self._recording.locked():
             return {"ok": False, "error": "Уже идёт запись другой встречи."}
-        st.state = "scheduled"
+        # Claim before spawning so a concurrent tick can't double-launch.
+        with self._lock:
+            st.state, st.detail = "recording", "Бот заходит на встречу…"
         threading.Thread(target=self._run, args=(st,), daemon=True).start()
         return {"ok": True, "detail": "Запись запущена."}
 
