@@ -117,6 +117,17 @@
         <div><label>OAuth-токен Я.Диска</label><input id="yd_token" type="password" placeholder="scope cloud_api:disk.write"></div>
         <div><label>Папка на диске</label><input id="yd_folder" type="text" placeholder="disk:/Телемост-записи"></div>
       </div>
+      <div class="note">
+        ⚠️ <b>ClientID и Client secret — это НЕ токен</b>, их в поле выше вставлять нельзя (будет 401).
+        Токен нужно получить отдельно: вставьте ваш <b>ClientID</b> и нажмите «Получить токен» —
+        откроется страница Яндекса, разрешите доступ, и на странице
+        <code>oauth.yandex.ru/verification_code</code> появится сам токен. Скопируйте его в поле
+        «OAuth-токен Я.Диска» и нажмите «Сохранить».
+      </div>
+      <div class="row">
+        <input id="yd_client_id" type="text" placeholder="ClientID приложения (32 символа)" style="flex:1;min-width:240px">
+        <button class="ghost" onclick="getYandexToken()">Получить токен</button>
+      </div>
     </div>
     <div id="cf_gdrive" class="cf hide">
       <div class="grid2">
@@ -370,6 +381,15 @@ async function saveCloud(){
   try{ await api("POST","/api/automation/settings", b);
     ["yd_token","gd_client_secret","gd_refresh_token"].forEach(i=>$(i).value="");
     toast("Облако сохранено"); cloudStatus(); }catch(e){ toast(e.message,true); }
+}
+function getYandexToken(){
+  const cid=($("yd_client_id").value||"").trim();
+  if(!cid){ $("cloud_status").innerHTML="<span class='bad'>Сначала вставьте ClientID приложения.</span>"; return; }
+  // Implicit flow: the token is shown on the verification_code page after consent.
+  const url="https://oauth.yandex.ru/authorize?response_type=token&client_id="+encodeURIComponent(cid);
+  try{ window.open(url,"_blank","noopener"); }catch(e){}
+  $("cloud_status").innerHTML="<span class='ok'>Разрешите доступ на странице Яндекса, затем скопируйте показанный токен в поле «OAuth-токен Я.Диска» и нажмите «Сохранить».</span> "
+    +"Если вкладка не открылась — перейдите вручную: <a href='"+url+"' target='_blank' rel='noopener'>открыть авторизацию</a>";
 }
 async function testCloud(){
   $("cloud_status").innerHTML="загрузка тестового файла…";
