@@ -55,7 +55,7 @@ def record_meeting(url: str, out_path: str, cfg: dict,
         # back to capturing the whole desktop so the recording isn't lost.
         title = bot.window_title()
         rec = capture.FFmpegRecorder(out_path, cfg, on_log=log, window_title=title)
-        log(f"В звонке — пишу окно «{title or '—'}» (ffmpeg).")
+        log(f"Бот в звонке. Запускаю запись окна «{title or '—'}»…")
         rec.start()
         time.sleep(3)
         if not rec.running:
@@ -69,6 +69,7 @@ def record_meeting(url: str, out_path: str, cfg: dict,
                         "error": "ffmpeg не смог записывать. " + (rec.error_tail() or
                                  "Проверьте ffmpeg и аудио-устройство (выберите рабочее "
                                  "из списка).")}
+        log("🔴 Идёт запись встречи — бот в звонке.")
         reason = bot.wait_until_end(should_stop, max_sec, alone_sec, min_p)
         log(f"Останавливаю запись (причина: {reason}).")
         rec.stop()
