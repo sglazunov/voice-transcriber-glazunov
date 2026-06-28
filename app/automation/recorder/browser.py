@@ -208,14 +208,34 @@ class TelemostBot:
         else:
             user_dir = tempfile.mkdtemp(prefix="tm-guest-")
             self._temp_profile = user_dir
+        # For recording, open a real maximised window (full screen width) so the
+        # capture is as large as possible; headless contexts keep a fixed size.
+        args = list(_LAUNCH_ARGS)
+        if not headless:
+            args += ["--start-maximized", "--window-position=0,0"]
         self._ctx = self._pw.chromium.launch_persistent_context(
-            user_dir, headless=headless, args=_LAUNCH_ARGS,
+            user_dir, headless=headless, args=args,
             permissions=["microphone", "camera"],
             accept_downloads=True,   # Telemost "Запись на компьютер" → a download
-            viewport={"width": 1280, "height": 720})
+            no_viewport=not headless,  # use the actual window size when headed
+            viewport=None if not headless else {"width": 1280, "height": 720})
         self._page = self._ctx.pages[0] if self._ctx.pages else self._ctx.new_page()
         self._download_path = None
         self._ctx.on("download", self._on_download)
+        if not headless:
+            self._maximize_window()
+
+    def _maximize_window(self) -> None:
+        """Maximise to full screen width via CDP (reliable across DPI, unlike
+        --start-maximized which Playwright often overrides)."""
+        try:
+            cdp = self._ctx.new_cdp_session(self._page)
+            win = cdp.send("Browser.getWindowForTarget")
+            cdp.send("Browser.setWindowBounds", {
+                "windowId": win["windowId"],
+                "bounds": {"windowState": "maximized"}})
+        except Exception as e:  # noqa: BLE001
+            self._on_log(f"Не удалось развернуть окно: {e}")
 
     # -- Telemost native recording -----------------------------------------
     def _on_download(self, dl) -> None:
