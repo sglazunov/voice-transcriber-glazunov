@@ -75,6 +75,13 @@ class Scheduler:
                 self._states.values(),
                 key=lambda s: (s.start is None, s.start or datetime.max.replace(
                     tzinfo=timezone.utc)))]
+        # Don't let old "missed" meetings pile up: keep only the single most
+        # recent one, plus everything else (upcoming / in-progress / done).
+        missed = [m for m in meetings if m.get("state") == "missed"]
+        if len(missed) > 1:
+            latest = max(missed, key=lambda m: m.get("start") or "")
+            meetings = [m for m in meetings
+                        if m.get("state") != "missed" or m is latest]
         return {"running": bool(self._thread and self._thread.is_alive()),
                 "enabled": bool(cfg.get("enabled")),
                 "recording": self._recording.locked(),
