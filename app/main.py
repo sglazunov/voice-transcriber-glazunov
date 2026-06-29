@@ -463,6 +463,8 @@ class AutomationSettings(BaseModel):
     rec_days: list | None = None
     rec_include: str | None = None
     rec_exclude: str | None = None
+    rec_default_on: bool | None = None
+    rec_decisions: dict | None = None
 
 
 @app.post("/api/automation/settings")
@@ -492,12 +494,26 @@ def automation_meetings():
         meetings = weeek.upcoming_meetings(token, cfg.get("weeek_project_id"), tz)
     except weeek.WeeekError as e:
         raise HTTPException(502, str(e))
-    return {"meetings": [
+    decisions = cfg.get("rec_decisions") or {}
+    return {"default_on": bool(cfg.get("rec_default_on", True)),
+            "meetings": [
         {"task_id": m.task_id, "title": m.title, "url": m.url,
          "start": m.start.isoformat() if m.start else None,
-         "project_id": m.project_id}
+         "project_id": m.project_id,
+         "decision": decisions.get(str(m.task_id))}  # True/False/None
         for m in meetings
     ]}
+
+
+class MeetingDecision(BaseModel):
+    record: bool | None = None  # True=record, False=skip, None=use default mode
+
+
+@app.post("/api/automation/meetings/{task_id}/decision")
+def automation_meeting_decision(task_id: str, body: MeetingDecision):
+    """Choose whether the bot records this specific meeting (overrides filters)."""
+    from .automation.scheduler import scheduler
+    return scheduler.set_decision(task_id, body.record)
 
 
 @app.get("/api/automation/clouds/status")
