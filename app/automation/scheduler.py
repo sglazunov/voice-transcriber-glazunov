@@ -124,7 +124,19 @@ class Scheduler:
         return [w.strip().lower() for w in text.split(",") if w.strip()]
 
     def _passes_filter(self, st: "MeetingState", cfg: dict) -> tuple[bool, str]:
-        """Apply the user's "which meetings to record" rules. Empty = record all."""
+        """Apply the user's "which meetings to record" rules. Empty = record all.
+
+        A per-meeting manual choice wins over everything: explicitly ON always
+        records, explicitly OFF never does. With no choice, the default mode
+        applies (record all, or record only chosen), then the keyword/time rules.
+        """
+        dec = (cfg.get("rec_decisions") or {}).get(str(st.task_id))
+        if dec is True:
+            return True, ""
+        if dec is False:
+            return False, "выключена вручную"
+        if not cfg.get("rec_default_on", True):
+            return False, "режим «только выбранные» — не отмечена"
         title = (st.title or "").lower()
         exc = self._kw(cfg.get("rec_exclude"))
         if exc and any(k in title for k in exc):
@@ -279,6 +291,24 @@ class Scheduler:
             return {"ok": False, "error": "Сейчас запись не идёт."}
         self._stop_recording.set()
         return {"ok": True, "detail": "Останавливаю запись…"}
+
+    def set_decision(self, task_id: str, record) -> dict:
+        """Record/skip a specific meeting. `record` is True, False, or None
+        (clear the override → fall back to the default mode)."""
+        cfg = auto_settings.load()
+        decisions = dict(cfg.get("rec_decisions") or {})
+        if record is None:
+            decisions.pop(str(task_id), None)
+        else:
+            decisions[str(task_id)] = bool(record)
+        auto_settings.save({"rec_decisions": decisions})
+        # If we'd already skipped it, allow a re-evaluation on the next tick.
+        with self._lock:
+            for st in self._states.values():
+                if str(st.task_id) == str(task_id) and st.state in ("skipped", "missed"):
+                    if st.start is not None and st.start.timestamp() >= self._boot_time:
+                        st.state, st.detail = "scheduled", ""
+        return {"ok": True, "task_id": str(task_id), "record": record}
 
     def run_now(self, task_id: str) -> dict:
         """Manually trigger recording for a known meeting task (for testing)."""

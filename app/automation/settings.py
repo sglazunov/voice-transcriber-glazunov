@@ -58,6 +58,11 @@ _DEFAULTS: dict[str, Any] = {
     "rec_days": [],                   # weekday numbers 0=Mon..6=Sun; empty = any day
     "rec_include": "",                # keywords (comma/line); if set, the title MUST contain one
     "rec_exclude": "",                # keywords (comma/line); a title containing any is skipped
+    # --- per-meeting manual choice (overrides the keyword/time filters) ---
+    "rec_default_on": True,           # record meetings that have no explicit choice
+                                      # True = record all (minus ones turned off);
+                                      # False = record ONLY ones turned on
+    "rec_decisions": {},              # {task_id(str): true=record | false=skip}
     # --- after recording: independently toggleable stages ---
     "do_transcribe": True,            # run speech recognition on the recording
     "do_protocol": True,              # build the Word protocol (needs do_transcribe)
