@@ -94,6 +94,7 @@
       <button class="go" onclick="saveWeeek()">Сохранить</button>
       <button class="ghost" onclick="loadProjects()">Мои проекты</button>
       <button class="ghost" onclick="loadMeetings()">Показать ближайшие встречи</button>
+      <button class="ghost danger" onclick="resetWeeekToken()">Сбросить токен</button>
     </div>
     <div id="projects" class="mlist"></div>
     <div id="weeek_status" class="statusline"></div>
@@ -355,6 +356,12 @@ async function saveWeeek(){
   if($("weeek_token").value.trim()) b.weeek_token=$("weeek_token").value.trim();
   try{ await api("POST","/api/automation/settings", b); $("weeek_token").value="";
        toast("Weeek сохранён"); loadAll(); }catch(e){ toast(e.message,true); }
+}
+async function resetWeeekToken(){
+  if(!confirm("Сбросить сохранённый токен Weeek? Бот перестанет видеть встречи, пока не вставите новый.")) return;
+  try{ await api("POST","/api/automation/settings", {weeek_token:""});
+       $("weeek_token").value=""; $("weeek_token").placeholder="вставьте токен";
+       toast("Токен Weeek сброшен"); loadAll(); }catch(e){ toast(e.message,true); }
 }
 async function loadMeetings(){
   $("weeek_status").innerHTML="загрузка…";
