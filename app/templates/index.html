@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Распознавание речи</title>
   <style>
-    :root{--bg:#0b1220;--card:#151f33;--card2:#0f1830;--accent:#38bdf8;--accent2:#22d3ee;
-          --txt:#e6edf6;--muted:#8aa0bd;--line:#26344f;--ok:#16a34a;--err:#dc2626;
+    :root{--bg:#0a0f1c;--card:#151f33;--card2:#0f1830;--accent:#5ec6ff;--accent2:#22d3ee;
+          --txt:#eaf1fb;--muted:#93a6c4;--line:rgba(120,150,200,.18);--ok:#16a34a;--err:#dc2626;
           --warn:#d97706;}
     *{box-sizing:border-box}
     body{margin:0;background:linear-gradient(180deg,#0b1220,#0a1020);color:var(--txt);
@@ -390,6 +390,7 @@
       <button class="go" id="go" disabled>Распознать</button>
     </div>
     <div id="modelHint" class="muted" style="margin-top:6px;font-size:12px;line-height:1.5"></div>
+    <div id="modelDownload" style="margin-top:6px"></div>
     <div id="diarHints" class="hidden" style="margin-top:8px;background:#1c1208;
          border:1px solid #4a3200;border-radius:10px;padding:10px 12px;
          font-size:12px;color:var(--muted);line-height:1.5"></div>
@@ -519,6 +520,34 @@ function onModelChange(){
   const el=$("modelHint"); if(!el) return;
   const v=$("model")?$("model").value:"";
   el.textContent=MODEL_INFO[v]||MODEL_INFO[""];
+  refreshModelDownload(v);
+}
+/* Show a "download model" button when the chosen recognition model isn't cached
+   yet — so it can be fetched without attaching a file first. */
+let _modelPoll=null;
+async function refreshModelDownload(v){
+  const box=$("modelDownload"); if(!box) return;
+  clearTimeout(_modelPoll);
+  let s; try{ s=await(await fetch("/api/model/status?name="+encodeURIComponent(v||""))).json(); }catch{ box.innerHTML=""; return; }
+  const ins=s.download||{};
+  if(s.downloaded && ins.state!=="running"){
+    box.innerHTML='<span class="muted" style="font-size:12px;color:#22c55e">✓ Модель '+esc(s.name)+' скачана</span>';
+    return;
+  }
+  if(ins.state==="running"){
+    const pct=(ins.percent!=null)?(" "+ins.percent+"%"):"";
+    box.innerHTML='<div class="muted" style="font-size:12px"><span class="spinner"></span>'+esc(ins.message||("Скачивание"+pct))+'</div>';
+    _modelPoll=setTimeout(()=>refreshModelDownload(v),1500);
+    return;
+  }
+  const err=ins.state==="error"?`<div class="warn" style="font-size:12px;margin-bottom:4px">${esc(ins.message||"ошибка")}</div>`:"";
+  box.innerHTML=err+`<button class="ghost" type="button" onclick="downloadModel('${esc(s.name)}')">⤓ Скачать модель ${esc(s.name)}${s.size_hint?(" ("+esc(s.size_hint)+")"):""}</button>
+    <div class="muted" style="font-size:11px;margin-top:3px">Иначе модель скачается при первом «Распознать».</div>`;
+}
+async function downloadModel(name){
+  const v=$("model")?$("model").value:"";
+  try{ await fetch("/api/model/download?name="+encodeURIComponent(v||""),{method:"POST"}); }catch{}
+  refreshModelDownload(v);
 }
 async function onDiarizeToggle(){
   const box=$("diarHints");
@@ -534,7 +563,12 @@ async function onDiarizeToggle(){
       const items=(s.checks||[]).filter(c=>!c.ok)
         .map(c=>`<li><b>${esc(c.name)}</b>: ${esc(c.hint)}</li>`).join("");
       const needToken=(s.checks||[]).some(c=>!c.ok && /HuggingFace|HF_TOKEN/i.test(c.name));
+      const needPkgs=(s.checks||[]).some(c=>!c.ok && /torch|pyannote/i.test(c.name));
       let html="⚠ Для «кто говорил» не хватает:<ul style='margin:6px 0 0;padding-left:18px'>"+items+"</ul>";
+      if(needPkgs){
+        html+=`<div style="margin-top:8px"><button class="ghost" type="button" onclick="installDiar()">⤓ Установить torch + pyannote.audio (~2.5 ГБ, в .venv)</button>
+          <span class="muted" id="diarInstallMsg"></span></div>`;
+      }
       if(needToken){
         html+=`<div style="margin-top:8px">
           <input id="hfToken" type="password" autocomplete="off" spellcheck="false" placeholder="HF-токен (hf_…)"
@@ -563,6 +597,26 @@ async function saveHfToken(){
     else if(msg){msg.textContent="✗ "+(s.detail||"Ошибка");}
   }catch{ if(msg)msg.textContent="✗ Сбой сети"; }
 }
+/* Install torch + pyannote.audio into the app's .venv, with progress. */
+let _diarPoll=null;
+async function installDiar(){
+  try{ await fetch("/api/setup/deps/diarization/install",{method:"POST"}); }catch{}
+  pollDiar();
+}
+async function pollDiar(){
+  const msg=$("diarInstallMsg"); if(!msg) return;
+  let st; try{ st=await(await fetch("/api/setup/deps")).json(); }catch{ return; }
+  const ins=(st.diarization||{}).install||{};
+  if((st.diarization||{}).ready){
+    clearTimeout(_diarPoll);
+    msg.innerHTML='<span style="color:#22c55e">✓ установлено</span>';
+    onDiarizeToggle();                 // re-check; packages now OK
+    return;
+  }
+  if(ins.state==="error"){ msg.innerHTML='<span style="color:#f87171">'+esc(ins.message||"ошибка")+'</span>'; return; }
+  msg.innerHTML='<span class="spinner"></span> '+esc(ins.message||"устанавливаю…");
+  _diarPoll=setTimeout(pollDiar,2500);
+}
 async function onScreenToggle(){
   const box=$("screenHints");
   if(!$("capture_screen").checked){box.classList.add("hidden");return;}
@@ -577,10 +631,27 @@ async function onScreenToggle(){
       const items=(s.checks||[]).filter(c=>!c.ok)
         .map(c=>`<li><b>${esc(c.name)}</b>: ${esc(c.hint)}</li>`).join("");
       box.innerHTML="⚠ Для распознавания экрана не хватает:<ul style='margin:6px 0 0;padding-left:18px'>"+
-        items+"</ul><div style='margin-top:6px'>Можно оставить галочку: распознавание речи "+
+        items+"</ul>"+
+        `<div style="margin-top:8px"><button class="ghost" type="button" onclick="installOcr()">⤓ Установить OCR (Pillow + pytesseract + Tesseract)</button>
+          <span class="muted" id="ocrInstallMsg"></span></div>`+
+        "<div style='margin-top:6px'>Можно оставить галочку: распознавание речи "+
         "всё равно пройдёт, просто без текста с экрана.</div>";
     }
   }catch{box.innerHTML="Не удалось проверить готовность распознавания экрана.";}
+}
+let _ocrPoll=null;
+async function installOcr(){
+  try{ await fetch("/api/setup/deps/ocr/install",{method:"POST"}); }catch{}
+  pollOcr();
+}
+async function pollOcr(){
+  const msg=$("ocrInstallMsg"); if(!msg) return;
+  let st; try{ st=await(await fetch("/api/setup/deps")).json(); }catch{ return; }
+  const ins=(st.ocr||{}).install||{};
+  if((st.ocr||{}).ready){ clearTimeout(_ocrPoll); msg.innerHTML='<span style="color:#22c55e">✓ установлено</span>'; onScreenToggle(); return; }
+  if(ins.state==="error"){ msg.innerHTML='<span style="color:#f87171">'+esc(ins.message||"ошибка")+'</span>'; return; }
+  msg.innerHTML='<span class="spinner"></span> '+esc(ins.message||"устанавливаю…");
+  _ocrPoll=setTimeout(pollOcr,2500);
 }
 
 /* ---------- local engine (Ollama) install on demand ---------- */
@@ -799,12 +870,11 @@ function renderSegments(el,segs){
 }
 
 /* ---------- analysis block ---------- */
-function taskParts(t){
-  if(t&&typeof t==='object')return{text:String(t.task||''),owner:String(t.owner||'')};
-  return{text:String(t||''),owner:''};
+function taskText(t){
+  if(t&&typeof t==='object')return String(t.task||t.text||'');
+  return String(t||'');
 }
-function taskHtml(t){const p=taskParts(t);
-  return esc(p.text)+(p.owner?` — <i style="color:var(--muted)">${esc(p.owner)}</i>`:'');}
+function taskHtml(t){return esc(taskText(t));}
 function renderAnalysis(job){
   const block=$('analysisBlock');
   if(!job.analyze){block.classList.add('hidden');return;}
@@ -834,14 +904,6 @@ function renderAnalysis(job){
   } else if(a.summary){
     const prov=prettyProvider(a._provider);
     if(prov)html+=`<div class="muted" style="margin-bottom:8px">🤖 Движок: ${esc(prov)}</div>`;
-    if(a.participants&&a.participants.length){
-      const items=a.participants.map(p=>{
-        const n=(p&&typeof p==='object')?(p.name||''):String(p);
-        const r=(p&&typeof p==='object')?(p.role||''):'';
-        return `<li><b>${esc(n)}</b>${r?` — <i style="color:var(--muted)">${esc(r)}</i>`:''}</li>`;
-      }).join('');
-      html+=`<div class="analysis-section"><h3>Участники</h3><ul>${items}</ul></div>`;
-    }
     html+=`<div class="analysis-section"><h3>О чём шёл разговор</h3><p>${esc(a.summary)}</p></div>`;
 
     if(a.detailed&&a.detailed.length){
@@ -872,12 +934,11 @@ function renderAnalysis(job){
       html+=`<div class="analysis-section"><h3>Сделано (выполненные задачи)</h3><ul>${items}</ul></div>`;
     }
     if(a.tasks&&a.tasks.length){
-      const rows=a.tasks.map((t,i)=>{const p=taskParts(t);
-        return `<tr><td style="width:28px;text-align:right;color:var(--muted)">${i+1}</td>`+
-               `<td>${esc(p.text)}</td>`+
-               `<td style="white-space:nowrap"><b>${p.owner?esc(p.owner):'—'}</b></td></tr>`;}).join('');
+      const rows=a.tasks.map((t,i)=>
+        `<tr><td style="width:28px;text-align:right;color:var(--muted)">${i+1}</td>`+
+        `<td>${esc(taskText(t))}</td></tr>`).join('');
       html+=`<div class="analysis-section"><h3>Задачи (нужно сделать)</h3>
-        <table><thead><tr><th>№</th><th>Задача</th><th>Ответственный</th></tr></thead>
+        <table><thead><tr><th>№</th><th>Задача</th></tr></thead>
         <tbody>${rows}</tbody></table></div>`;
     } else {
       html+=`<div class="analysis-section"><h3>Задачи (нужно сделать)</h3><p class="empty">Задач не выявлено</p></div>`;

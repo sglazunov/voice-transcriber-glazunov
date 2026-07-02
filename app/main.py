@@ -64,7 +64,13 @@ def _engine_list() -> list[dict]:
     for p in avail:
         if p == "ollama":
             continue
-        engines.append({"value": p, "label": config.PROVIDER_LABELS.get(p, p)})
+        tiers = config.PROVIDER_MODELS.get(p)
+        if tiers:
+            # One entry per model tier so the user picks how powerful it is.
+            for t in tiers:
+                engines.append({"value": f"{p}:{t['value']}", "label": t["label"]})
+        else:
+            engines.append({"value": p, "label": config.PROVIDER_LABELS.get(p, p)})
     return engines
 
 app = FastAPI(title="Voice Transcriber", version="1.0")
@@ -386,6 +392,38 @@ def ollama_install_cancel():
     return ollama_setup.cancel()
 
 
+# ---- Optional dependencies (install into the app's venv from the UI) -------
+@app.get("/api/setup/deps")
+def deps_status():
+    """Readiness + install progress of optional deps (playwright/diariz/ffmpeg)."""
+    from . import deps_setup
+    return deps_setup.status()
+
+
+@app.post("/api/setup/deps/{component}/install")
+def deps_install(component: str):
+    """Install one optional dependency into the app's venv (background)."""
+    from . import deps_setup
+    if component not in deps_setup.COMPONENTS:
+        raise HTTPException(404, "Неизвестный компонент")
+    return deps_setup.install(component)
+
+
+# ---- Recognition models (pre-download from the UI, no transcription) -------
+@app.get("/api/model/status")
+def model_status(name: str = ""):
+    """Whether a Whisper model is downloaded + download progress."""
+    from . import whisper_setup
+    return whisper_setup.status(name)
+
+
+@app.post("/api/model/download")
+def model_download(name: str = ""):
+    """Download a Whisper model into the cache (background, no transcription)."""
+    from . import whisper_setup
+    return whisper_setup.download(name)
+
+
 # --------------------------------------------------------------------------- #
 # Meeting automation (Weeek → record → cloud → protocol). See app/automation.
 # --------------------------------------------------------------------------- #
@@ -414,6 +452,7 @@ class AutomationSettings(BaseModel):
     bot_join_name: str | None = None
     post_back_to_weeek: bool | None = None
     # recorder
+    record_mode: str | None = None
     auth_mode: str | None = None
     browser_profile_dir: str | None = None
     ffmpeg_path: str | None = None
@@ -424,6 +463,14 @@ class AutomationSettings(BaseModel):
     end_when_alone_sec: int | None = None
     min_participants: int | None = None
     max_meeting_min: int | None = None
+    # which meetings to auto-record (empty = all)
+    rec_time_from: str | None = None
+    rec_time_to: str | None = None
+    rec_days: list | None = None
+    rec_include: str | None = None
+    rec_exclude: str | None = None
+    rec_default_on: bool | None = None
+    rec_decisions: dict | None = None
 
 
 @app.post("/api/automation/settings")
@@ -453,12 +500,26 @@ def automation_meetings():
         meetings = weeek.upcoming_meetings(token, cfg.get("weeek_project_id"), tz)
     except weeek.WeeekError as e:
         raise HTTPException(502, str(e))
-    return {"meetings": [
+    decisions = cfg.get("rec_decisions") or {}
+    return {"default_on": bool(cfg.get("rec_default_on", True)),
+            "meetings": [
         {"task_id": m.task_id, "title": m.title, "url": m.url,
          "start": m.start.isoformat() if m.start else None,
-         "project_id": m.project_id}
+         "project_id": m.project_id,
+         "decision": decisions.get(str(m.task_id))}  # True/False/None
         for m in meetings
     ]}
+
+
+class MeetingDecision(BaseModel):
+    record: bool | None = None  # True=record, False=skip, None=use default mode
+
+
+@app.post("/api/automation/meetings/{task_id}/decision")
+def automation_meeting_decision(task_id: str, body: MeetingDecision):
+    """Choose whether the bot records this specific meeting (overrides filters)."""
+    from .automation.scheduler import scheduler
+    return scheduler.set_decision(task_id, body.record)
 
 
 @app.get("/api/automation/clouds/status")
@@ -536,6 +597,25 @@ def automation_recorder_audio_devices():
     return {"devices": capture.list_audio_devices(cfg.get("ffmpeg_path") or "ffmpeg")}
 
 
+@app.get("/api/automation/recorder/login-status")
+def automation_recorder_login_status():
+    """Whether the recorder profile is logged into Yandex (for the UI hint)."""
+    from .automation import settings as auto_settings
+    from .automation.recorder import browser
+    return browser.login_status(auto_settings.load())
+
+
+@app.get("/api/automation/recorder/audio-test")
+def automation_recorder_audio_test():
+    """Record a few seconds from the chosen audio device and report its level —
+    so the user can verify the meeting's sound actually reaches it."""
+    from .automation import settings as auto_settings
+    from .automation.recorder import capture
+    cfg = auto_settings.load()
+    return capture.test_audio_level(cfg.get("ffmpeg_path") or "ffmpeg",
+                                    (cfg.get("audio_device") or "").strip())
+
+
 @app.post("/api/automation/recorder/login")
 def automation_recorder_login():
     """Open a headed browser so the user logs into Yandex once (profile mode)."""
@@ -574,6 +654,20 @@ def automation_recorder_test(body: RecorderTest):
         should_stop=lambda: time.time() > deadline)
     res["logs"] = logs
     return res
+
+
+@app.get("/api/automation/weeek/projects")
+def automation_weeek_projects():
+    """List the workspace's projects (id + name) so the user can pick which one
+    to record. The token sees all projects; `projectId` is what scopes it."""
+    from .automation import settings as auto_settings, weeek
+    token = auto_settings.get("weeek_token")
+    if not token:
+        raise HTTPException(400, "Сначала задайте токен Weeek и нажмите «Сохранить».")
+    try:
+        return {"projects": weeek.list_projects(token)}
+    except weeek.WeeekError as e:
+        raise HTTPException(502, str(e))
 
 
 @app.get("/api/automation/weeek/probe")

@@ -80,6 +80,8 @@ def _request(method: str, path: str, token: str,
         raise WeeekError(f"Weeek API {e.code}: {detail}") from e
     except urllib.error.URLError as e:
         raise WeeekError(f"Не удалось подключиться к Weeek: {e.reason}") from e
+    except (TimeoutError, OSError) as e:
+        raise WeeekError(f"Таймаут/сетевая ошибка Weeek: {e}") from e
     try:
         out = json.loads(payload)
     except ValueError as e:
@@ -105,6 +107,21 @@ def list_tasks(token: str, project_id: Any = None,
     if tasks is None and isinstance(out, list):
         tasks = out
     return tasks or []
+
+
+def list_projects(token: str) -> list[dict]:
+    """Return the workspace's projects as [{id, name}], so the user can pick the
+    `projectId` to scope recording to one project."""
+    out = _request("GET", "/tm/projects", token, params={"perPage": 100})
+    projects = out.get("projects") if isinstance(out, dict) else None
+    if projects is None and isinstance(out, list):
+        projects = out
+    result = []
+    for p in projects or []:
+        if isinstance(p, dict):
+            result.append({"id": p.get("id"),
+                           "name": p.get("name") or p.get("title") or f"Проект {p.get('id')}"})
+    return result
 
 
 def get_task(token: str, task_id: Any) -> dict:

@@ -5,27 +5,40 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Автоматизация встреч</title>
   <style>
-    :root{--bg:#0b1220;--card:#151f33;--card2:#0f1830;--accent:#38bdf8;--accent2:#22d3ee;
-          --txt:#e6edf6;--muted:#8aa0bd;--line:#26344f;--ok:#16a34a;--err:#dc2626;--warn:#d97706;}
+    :root{--bg:#0a0f1c;--card:rgba(28,40,66,.55);--card2:#0f1830;--accent:#5ec6ff;--accent2:#22d3ee;
+          --txt:#eaf1fb;--muted:#93a6c4;--line:rgba(120,150,200,.18);--ok:#16a34a;--err:#dc2626;--warn:#d97706;}
     *{box-sizing:border-box}
-    body{margin:0;background:linear-gradient(180deg,#0b1220,#0a1020);color:var(--txt);
-         font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-    .wrap{max-width:920px;margin:0 auto;padding:22px 16px 80px}
+    body{margin:0;color:var(--txt);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+         background:radial-gradient(1200px 600px at 15% -5%,rgba(56,189,248,.14),transparent 60%),
+                    radial-gradient(1000px 500px at 95% 0%,rgba(124,58,237,.12),transparent 55%),
+                    linear-gradient(180deg,#0a0f1c,#080c16)}
+    .wrap{max-width:1320px;margin:0 auto;padding:18px 18px 40px}
     a{color:var(--accent)}
-    h1{font-size:22px;margin:4px 0}
-    .sub{color:var(--muted);font-size:13px;margin-bottom:18px}
-    .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:18px}
-    .card h2{font-size:15px;margin:0 0 4px;font-weight:600}
-    .card .desc{color:var(--muted);font-size:12px;margin:0 0 14px}
-    label{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px}
+    h1{font-size:22px;margin:2px 0;letter-spacing:.2px}
+    .sub{color:var(--muted);font-size:13px;margin-bottom:14px}
+    /* two balanced columns so everything fits with minimal scroll */
+    .cards{column-count:2;column-gap:16px}
+    @media(max-width:1000px){.cards{column-count:1}}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:15px 16px;
+          margin:0 0 16px;break-inside:avoid;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
+          box-shadow:0 10px 30px -18px rgba(0,0,0,.7)}
+    .card h2{font-size:14px;margin:0 0 3px;font-weight:700;letter-spacing:.2px}
+    .card .desc{color:var(--muted);font-size:12px;margin:0 0 10px}
+    label{display:block;font-size:12px;color:var(--muted);margin:8px 0 3px}
     input[type=text],input[type=password],input[type=number],select{
       width:100%;padding:9px 10px;border-radius:10px;border:1px solid var(--line);
       background:#0b1220;color:var(--txt);font-size:13px;font-family:inherit}
     .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
     .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
     @media(max-width:640px){.grid2,.grid3{grid-template-columns:1fr}}
-    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:14px}
-    .chk{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--txt);margin-top:12px}
+    .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px}
+    .chk{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--txt);margin-top:9px}
+    .filterbox{border:1px dashed var(--line);border-radius:12px;padding:8px 12px;background:rgba(15,24,48,.4)}
+    .filterbox>summary{cursor:pointer;font-size:13px;color:var(--txt);user-select:none;font-weight:600}
+    .daysrow{display:flex;gap:4px;flex-wrap:wrap}
+    .daysrow label{display:inline-flex;align-items:center;gap:3px;margin:0;font-size:12px;color:var(--txt);
+                   background:#0b1220;border:1px solid var(--line);border-radius:8px;padding:4px 7px;cursor:pointer}
+    .daysrow input{width:auto;margin:0}
     button.go{background:linear-gradient(90deg,var(--accent),var(--accent2));color:#04212f;border:0;
               font-weight:700;padding:10px 18px;border-radius:11px;cursor:pointer;font-size:13px}
     button.ghost{background:#1b2740;color:var(--txt);border:1px solid var(--line);font-weight:600;
@@ -34,6 +47,13 @@
     button:disabled{opacity:.5;cursor:not-allowed}
     .note{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.5}
     .ok{color:#4ade80}.bad{color:#fca5a5}.warn{color:#fbbf24}
+    .spinner{display:inline-block;width:13px;height:13px;border:2px solid rgba(255,255,255,.18);
+             border-top-color:#38bdf8;border-radius:50%;animation:spin .7s linear infinite;
+             margin-right:6px;vertical-align:middle}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .dlbar{height:6px;background:rgba(255,255,255,.1);border-radius:6px;overflow:hidden;margin-top:5px}
+    .dlbar>i{display:block;height:100%;width:0;background:linear-gradient(90deg,#38bdf8,#22d3ee);
+             border-radius:6px;transition:width .3s}
     .badge{font-size:11px;padding:3px 9px;border-radius:999px;font-weight:600;background:#334155}
     .b-scheduled{background:#334155}.b-recording{background:#0369a1}.b-uploading{background:#7c3aed}
     .b-transcribing{background:#6d28d9}.b-done{background:#15803d}.b-error{background:#7f1d1d}
@@ -58,6 +78,7 @@
   <div class="sub">Weeek → запись Телемоста ботом → облако → распознавание и протокол.
     <a href="/">← к распознаванию</a></div>
 
+  <div class="cards">
   <!-- ============ WEEEK ============ -->
   <div class="card">
     <h2>1 · Weeek</h2>
@@ -65,13 +86,17 @@
     <label>API-токен Weeek</label>
     <input id="weeek_token" type="password" placeholder="вставьте токен">
     <div class="grid2">
-      <div><label>ID проекта (необязательно)</label><input id="weeek_project_id" type="text" placeholder="например 2"></div>
+      <div><label>ID проекта (необязательно)</label><input id="weeek_project_id" type="text" placeholder="пусто = все проекты"></div>
       <div><label>Часовой пояс</label><input id="timezone" type="text" placeholder="Europe/Moscow"></div>
     </div>
+    <div class="note">Токен видит <b>все</b> проекты воркспейса. Чтобы писать встречи только одного проекта — впишите его ID (или нажмите «Мои проекты» и выберите). Пусто = пишутся все проекты.</div>
     <div class="row">
       <button class="go" onclick="saveWeeek()">Сохранить</button>
+      <button class="ghost" onclick="loadProjects()">Мои проекты</button>
       <button class="ghost" onclick="loadMeetings()">Показать ближайшие встречи</button>
+      <button class="ghost danger" onclick="resetWeeekToken()">Сбросить токен</button>
     </div>
+    <div id="projects" class="mlist"></div>
     <div id="weeek_status" class="statusline"></div>
     <div id="meetings" class="mlist"></div>
   </div>
@@ -96,6 +121,17 @@
         <div><label>OAuth-токен Я.Диска</label><input id="yd_token" type="password" placeholder="scope cloud_api:disk.write"></div>
         <div><label>Папка на диске</label><input id="yd_folder" type="text" placeholder="disk:/Телемост-записи"></div>
       </div>
+      <div class="note">
+        ⚠️ <b>ClientID и Client secret — это НЕ токен</b>, их в поле выше вставлять нельзя (будет 401).
+        Токен нужно получить отдельно: вставьте ваш <b>ClientID</b> и нажмите «Получить токен» —
+        откроется страница Яндекса, разрешите доступ, и на странице
+        <code>oauth.yandex.ru/verification_code</code> появится сам токен. Скопируйте его в поле
+        «OAuth-токен Я.Диска» и нажмите «Сохранить».
+      </div>
+      <div class="row">
+        <input id="yd_client_id" type="text" placeholder="ClientID приложения (32 символа)" style="flex:1;min-width:240px">
+        <button class="ghost" onclick="getYandexToken()">Получить токен</button>
+      </div>
     </div>
     <div id="cf_gdrive" class="cf hide">
       <div class="grid2">
@@ -116,26 +152,39 @@
   <!-- ============ RECORDER ============ -->
   <div class="card">
     <h2>3 · Бот-рекордер (Телемост)</h2>
-    <p class="desc">Как бот заходит и пишет встречу. Нужны Playwright + ffmpeg + loopback-аудио на Windows.</p>
+    <p class="desc">Бот заходит в встречу (как гость) и записывает <b>окно с встречей</b> на всю длину (ffmpeg), со звуком. Нужны Playwright, ffmpeg и виртуальное аудио — кнопки установки ниже.</p>
     <div class="grid2">
       <div><label>Режим входа</label>
         <select id="auth_mode">
           <option value="guest">Гость (по ссылке)</option>
-          <option value="profile">Авторизованный (вход в Яндекс)</option>
+          <option value="profile">Авторизованный (если встреча требует входа)</option>
         </select>
       </div>
       <div><label>Имя бота в встрече</label><input id="bot_join_name" type="text" placeholder="Протокол-бот"></div>
     </div>
     <div class="grid2">
-      <div><label>Путь к ffmpeg</label><input id="ffmpeg_path" type="text" placeholder="ffmpeg"></div>
-      <div><label>Аудио-устройство (loopback / виртуальный кабель)</label>
+      <div><label>Программа ffmpeg (путь, если нет в системе)</label>
+        <input id="ffmpeg_path" type="text" placeholder="ffmpeg (или полный путь к ffmpeg.exe)">
+        <div class="note" style="margin-top:4px">ffmpeg — бесплатная программа записи/конвертации видео и звука. Обычно ставится один раз, и поле можно оставить как <code>ffmpeg</code>. Если её нет — нажмите «Установить ffmpeg» ниже, путь пропишется сам.</div>
+      </div>
+      <div><label>Аудио-устройство встречи (звук участников)</label>
         <select id="audio_device"><option value="">— выбрать —</option></select>
       </div>
     </div>
-    <div class="row">
-      <button class="ghost" onclick="loadAudioDevices()">Обновить список устройств</button>
-      <button class="ghost" onclick="recorderLogin()">Войти в Яндекс (для режима «профиль»)</button>
+    <div class="note">
+      🔊 <b>Чтобы в записи был звук встречи</b> (нужно для протокола), выберите выше <b>«CABLE Output (VB-Audio Virtual Cable)»</b> и один раз настройте Windows:<br>
+      1) <b>Параметры → Звук → Вывод</b> → сделайте устройством вывода <b>«CABLE Input (VB-Audio Virtual Cable)»</b> (тогда звук встречи пойдёт в кабель).<br>
+      2) Чтобы <b>самому слышать</b> встречу: <b>Панель управления → Звук → Запись</b> → «CABLE Output» → Свойства → вкладка «Прослушать» → ✓ «Прослушивать с данного устройства» → выберите наушники/динамики.<br>
+      3) Нажмите <b>«Проверить звук»</b> ниже — должно показать «звук есть ✓».
     </div>
+    <div class="row">
+      <button class="ghost" onclick="testAudio()">🔊 Проверить звук (3 сек)</button>
+      <button class="ghost" onclick="loadAudioDevices()">Обновить список устройств</button>
+      <button class="ghost" onclick="recorderLogin()">Войти в Яндекс</button>
+      <button class="ghost" onclick="checkLogin()">Проверить вход</button>
+    </div>
+    <div id="audio_status" class="statusline"></div>
+    <div id="login_status" class="statusline"></div>
     <div class="chk"><input id="capture_video" type="checkbox"> Записывать экран (для распознавания того, что показывают)</div>
     <div class="chk"><input id="headless" type="checkbox"> Скрытый браузер (headless)</div>
 
@@ -155,6 +204,7 @@
       <button class="go" onclick="saveRecorder()">Сохранить</button>
     </div>
     <div id="recorder_status" class="statusline"></div>
+    <div id="deps_install" class="row" style="margin-top:8px;flex-direction:column;align-items:stretch;gap:8px"></div>
 
     <details style="margin-top:14px">
       <summary style="cursor:pointer;color:var(--muted);font-size:13px">Тест записи (зайти и записать N секунд)</summary>
@@ -181,6 +231,42 @@
     <div class="note">Запись и выгрузка в облако делаются всегда. Если выключить распознавание —
       будет только видеофайл в облаке. Протокол и текст с экрана требуют включённого распознавания.</div>
 
+    <details class="filterbox" style="margin-top:14px">
+      <summary>🎯 Какие встречи записывать <span class="muted">(по умолчанию — все)</span></summary>
+      <div class="grid2" style="margin-top:10px">
+        <div><label>Режим по умолчанию</label>
+          <select id="rec_default_on">
+            <option value="1">Записывать все (кроме отключённых вручную)</option>
+            <option value="0">Записывать только выбранные вручную</option>
+          </select></div>
+      </div>
+      <div class="note">Точечно вкл/выкл каждую встречу — кнопкой «Показать ближайшие встречи» ниже,
+        там у каждой будет переключатель «записывать / не записывать». Ручной выбор всегда главнее фильтров по словам/времени.</div>
+      <div class="grid3" style="margin-top:10px">
+        <div><label>Записывать с (время)</label><input id="rec_time_from" type="time"></div>
+        <div><label>…по (время)</label><input id="rec_time_to" type="time"></div>
+        <div><label>Дни недели</label>
+          <div class="daysrow">
+            <label><input type="checkbox" class="recday" value="0">Пн</label>
+            <label><input type="checkbox" class="recday" value="1">Вт</label>
+            <label><input type="checkbox" class="recday" value="2">Ср</label>
+            <label><input type="checkbox" class="recday" value="3">Чт</label>
+            <label><input type="checkbox" class="recday" value="4">Пт</label>
+            <label><input type="checkbox" class="recday" value="5">Сб</label>
+            <label><input type="checkbox" class="recday" value="6">Вс</label>
+          </div>
+        </div>
+      </div>
+      <div class="grid2" style="margin-top:10px">
+        <div><label>Только с этими словами в названии (через запятую)</label>
+          <input id="rec_include" type="text" placeholder="напр.: созвон, демо, ретро"></div>
+        <div><label>Не записывать с этими словами</label>
+          <input id="rec_exclude" type="text" placeholder="напр.: личное, 1:1"></div>
+      </div>
+      <div class="note">Пусто во всех полях = записывать все встречи. Иначе — только подходящие под условия
+        (удобно для регулярных встреч с одинаковым названием). Кнопкой «Записать сейчас» можно записать любую вручную.</div>
+    </details>
+
     <div class="grid3" style="margin-top:14px">
       <div><label>Опрос Weeek, сек.</label><input id="poll_interval_sec" type="number" min="30" value="120"></div>
       <div><label>Заходить за, мин. до старта</label><input id="lookahead_min" type="number" min="0" value="2"></div>
@@ -205,6 +291,7 @@
     <div id="sched_status" class="statusline"></div>
     <div id="sched_meetings" class="mlist"></div>
   </div>
+  </div><!-- /.cards -->
 </div>
 
 <div id="toast" class="toast"></div>
@@ -254,8 +341,13 @@ async function loadAll(){
   setChk("post_back_to_weeek", s.post_back_to_weeek);
   setChk("do_transcribe", s.do_transcribe); setChk("do_protocol", s.do_protocol);
   setChk("ocr_screen", s.ocr_screen); stageDeps();
+  // record filter
+  setVal("rec_time_from", s.rec_time_from); setVal("rec_time_to", s.rec_time_to);
+  setVal("rec_include", s.rec_include); setVal("rec_exclude", s.rec_exclude);
+  setVal("rec_default_on", s.rec_default_on===false?"0":"1");
+  (s.rec_days||[]).forEach(d=>{const c=document.querySelector('.recday[value="'+d+'"]'); if(c)c.checked=true;});
   // set audio device after list loads
-  cloudStatus(); recorderStatus(); refreshStatus(); loadAudioDevices(s.audio_device);
+  cloudStatus(); recorderStatus(); refreshStatus(); loadAudioDevices(s.audio_device); checkLogin();
 }
 
 /* ---- Weeek ---- */
@@ -265,16 +357,55 @@ async function saveWeeek(){
   try{ await api("POST","/api/automation/settings", b); $("weeek_token").value="";
        toast("Weeek сохранён"); loadAll(); }catch(e){ toast(e.message,true); }
 }
+async function resetWeeekToken(){
+  if(!confirm("Сбросить сохранённый токен Weeek? Бот перестанет видеть встречи, пока не вставите новый.")) return;
+  try{ await api("POST","/api/automation/settings", {weeek_token:""});
+       $("weeek_token").value=""; $("weeek_token").placeholder="вставьте токен";
+       toast("Токен Weeek сброшен"); loadAll(); }catch(e){ toast(e.message,true); }
+}
 async function loadMeetings(){
   $("weeek_status").innerHTML="загрузка…";
   try{
     const d=await api("GET","/api/automation/meetings");
-    $("weeek_status").innerHTML = d.meetings.length? "":"<span class='warn'>встреч со ссылкой на Телемост не найдено</span>";
-    $("meetings").innerHTML=d.meetings.map(m=>`
-      <div class="mrow"><div><div class="t">${esc(m.title)}</div>
+    const defOn = d.default_on!==false;
+    $("weeek_status").innerHTML = d.meetings.length? "Выберите, какие встречи писать. «По умолчанию» = "+(defOn?"<b>записывать</b>":"<b>не записывать</b>")+".":"<span class='warn'>встреч со ссылкой на Телемост не найдено</span>";
+    $("meetings").innerHTML=d.meetings.map(m=>{
+      const dec = m.decision===true?"on":m.decision===false?"off":"default";
+      const sel=v=>dec===v?" selected":"";
+      return `<div class="mrow"><div><div class="t">${esc(m.title)}</div>
         <div class="s">${m.start?fmt(m.start):"без времени"} · <a href="${m.url}" target="_blank">ссылка</a></div></div>
-        <button class="ghost" onclick="runNow('${m.task_id}')">Записать сейчас</button></div>`).join("");
+        <div class="row" style="gap:6px">
+          <select onchange="setDecision('${esc(String(m.task_id))}', this.value)" title="Записывать эту встречу?">
+            <option value="default"${sel("default")}>по умолчанию</option>
+            <option value="on"${sel("on")}>✅ записывать</option>
+            <option value="off"${sel("off")}>🚫 не записывать</option>
+          </select>
+          <button class="ghost" onclick="runNow('${esc(String(m.task_id))}')">Записать сейчас</button>
+        </div></div>`;}).join("");
   }catch(e){ $("weeek_status").innerHTML="<span class='bad'>"+esc(e.message)+"</span>"; }
+}
+async function setDecision(id, val){
+  const record = val==="on"?true : val==="off"?false : null;
+  try{ await api("POST","/api/automation/meetings/"+encodeURIComponent(id)+"/decision", {record});
+    toast(record===true?"Будет записана":record===false?"Не будет записана":"По умолчанию");
+  }catch(e){ toast(e.message,true); }
+}
+async function loadProjects(){
+  $("weeek_status").innerHTML="загрузка проектов…";
+  try{
+    const d=await api("GET","/api/automation/weeek/projects");
+    $("weeek_status").innerHTML = d.projects.length? "Нажмите «Выбрать», чтобы писать встречи только этого проекта:":"<span class='warn'>проекты не найдены</span>";
+    $("projects").innerHTML=d.projects.map(p=>`
+      <div class="mrow"><div><div class="t">${esc(p.name)}</div>
+        <div class="s">ID: <code>${esc(String(p.id))}</code></div></div>
+        <button class="ghost" onclick="pickProject('${esc(String(p.id))}')">Выбрать</button></div>`).join("");
+  }catch(e){ $("weeek_status").innerHTML="<span class='bad'>"+esc(e.message)+"</span>"; }
+}
+async function pickProject(id){
+  $("weeek_project_id").value=id;
+  try{ await api("POST","/api/automation/settings", {weeek_project_id:id});
+    toast("Проект выбран (ID "+id+") — пишутся только его встречи"); $("projects").innerHTML="";
+  }catch(e){ toast(e.message,true); }
 }
 
 /* ---- Cloud ---- */
@@ -304,6 +435,15 @@ async function saveCloud(){
     ["yd_token","gd_client_secret","gd_refresh_token"].forEach(i=>$(i).value="");
     toast("Облако сохранено"); cloudStatus(); }catch(e){ toast(e.message,true); }
 }
+function getYandexToken(){
+  const cid=($("yd_client_id").value||"").trim();
+  if(!cid){ $("cloud_status").innerHTML="<span class='bad'>Сначала вставьте ClientID приложения.</span>"; return; }
+  // Implicit flow: the token is shown on the verification_code page after consent.
+  const url="https://oauth.yandex.ru/authorize?response_type=token&client_id="+encodeURIComponent(cid);
+  try{ window.open(url,"_blank","noopener"); }catch(e){}
+  $("cloud_status").innerHTML="<span class='ok'>Разрешите доступ на странице Яндекса, затем скопируйте показанный токен в поле «OAuth-токен Я.Диска» и нажмите «Сохранить».</span> "
+    +"Если вкладка не открылась — перейдите вручную: <a href='"+url+"' target='_blank' rel='noopener'>открыть авторизацию</a>";
+}
 async function testCloud(){
   $("cloud_status").innerHTML="загрузка тестового файла…";
   try{ const r=await api("POST","/api/automation/clouds/test");
@@ -319,6 +459,38 @@ async function recorderStatus(){
     parts.push((r.capture.ready?"<span class='ok'>✓</span>":"<span class='warn'>•</span>")+" захват: "+esc(r.capture.detail||""));
     $("recorder_status").innerHTML=parts.map(p=>"<div>"+p+"</div>").join("");
   }catch(e){ $("recorder_status").textContent=e.message; }
+  renderDeps();
+}
+
+/* In-app installers for optional deps (install into the app's .venv). */
+let _depPoll=null;
+async function renderDeps(){
+  let st; try{ st=await api("GET","/api/setup/deps"); }catch{ return; }
+  // Screen recording needs Playwright + ffmpeg + a loopback audio device.
+  const targets = ["playwright","ffmpeg","audio_loopback"];
+  const html=[]; let polling=false;
+  for(const c of targets){
+    const d=st[c]; if(!d||d.ready) continue;
+    const ins=d.install||{};
+    if(ins.state==="running"){
+      polling=true;
+      const pct=(ins.percent!=null);
+      html.push(`<div class="note"><span class="spinner"></span>${esc(d.label)}: ${esc(ins.message||"устанавливаю…")}`+
+        (pct?`<div class="dlbar"><i style="width:${ins.percent}%"></i></div>`:"")+`</div>`);
+    }else{
+      const err=ins.state==="error"?`<div class="warn" style="margin-bottom:4px">${esc(ins.message||"ошибка")}</div>`:"";
+      const verb=ins.state==="error"?"Повторить установку":"Установить";
+      html.push(`<div>${err}<button class="go" onclick="installDep('${c}')">⤓ ${verb}: ${esc(d.label)}</button></div>`);
+    }
+  }
+  $("deps_install").innerHTML=html.join("");
+  clearTimeout(_depPoll);
+  if(polling){ _depPoll=setTimeout(renderDeps,2500); }
+  else if(html.length===0){ /* всё готово */ }
+}
+async function installDep(c){
+  try{ await api("POST","/api/setup/deps/"+c+"/install"); }catch(e){ toast(e.message); }
+  renderDeps();
 }
 async function loadAudioDevices(selected){
   try{ const d=await api("GET","/api/automation/recorder/audio-devices");
@@ -329,8 +501,28 @@ async function loadAudioDevices(selected){
   }catch(e){}
 }
 async function recorderLogin(){
-  try{ const r=await api("POST","/api/automation/recorder/login"); toast(r.detail||"Открываю браузер…"); }
+  try{ const r=await api("POST","/api/automation/recorder/login"); toast(r.detail||"Открываю браузер…");
+    setTimeout(checkLogin, 1500); }
   catch(e){ toast(e.message,true); }
+}
+async function testAudio(){
+  const el=$("audio_status"); if(!el) return;
+  if(!$("audio_device").value){ el.innerHTML='<span class="warn">Сначала выберите аудио-устройство (CABLE Output).</span>'; return; }
+  el.innerHTML='<span class="spinner"></span> записываю 3 сек и измеряю звук…';
+  try{
+    await api("POST","/api/automation/settings",{audio_device:$("audio_device").value});
+    const r=await api("GET","/api/automation/recorder/audio-test");
+    if(!r.ok){ el.innerHTML='<span class="warn">'+esc(r.error||"ошибка")+'</span>'; return; }
+    if(r.has_sound) el.innerHTML='<span class="ok">✓ Звук есть (макс. '+r.max_db+' дБ) — запись будет со звуком. Можно записывать.</span>';
+    else el.innerHTML='<span class="warn">✗ Тишина (макс. '+r.max_db+' дБ). Звук встречи не идёт в это устройство — настройте Windows по инструкции выше (сделайте «CABLE Input» устройством вывода и включите что-нибудь со звуком при проверке).</span>';
+  }catch(e){ el.textContent=e.message; }
+}
+async function checkLogin(){
+  const el=$("login_status"); if(el) el.innerHTML='<span class="spinner"></span> проверяю вход…';
+  try{ const r=await api("GET","/api/automation/recorder/login-status");
+    const cls = r.logged_in===true?"ok":(r.logged_in===false?"warn":"");
+    if(el) el.innerHTML='<span class="'+cls+'">'+esc(r.detail||"")+'</span>';
+  }catch(e){ if(el) el.textContent=e.message; }
 }
 async function saveRecorder(){
   const b={auth_mode:$("auth_mode").value, bot_join_name:$("bot_join_name").value||null,
@@ -359,7 +551,11 @@ async function saveScheduler(){
   const b={poll_interval_sec:+$("poll_interval_sec").value, lookahead_min:+$("lookahead_min").value,
     analyze_provider:$("analyze_provider").value, post_back_to_weeek:$("post_back_to_weeek").checked,
     do_transcribe:$("do_transcribe").checked, do_protocol:$("do_protocol").checked,
-    ocr_screen:$("ocr_screen").checked};
+    ocr_screen:$("ocr_screen").checked,
+    rec_time_from:$("rec_time_from").value||"", rec_time_to:$("rec_time_to").value||"",
+    rec_include:$("rec_include").value||"", rec_exclude:$("rec_exclude").value||"",
+    rec_default_on:$("rec_default_on").value==="1",
+    rec_days:[...document.querySelectorAll(".recday:checked")].map(c=>+c.value)};
   try{ await api("POST","/api/automation/settings", b); toast("Планировщик сохранён"); }
   catch(e){ toast(e.message,true); }
 }

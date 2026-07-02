@@ -56,11 +56,13 @@ class Scheduler:
         self._stop = threading.Event()
         self._stop_recording = threading.Event()  # manual "stop current recording"
         self._last_poll = 0.0
+        self._boot_time = 0.0  # session start; meetings older than this are missed
 
     # -- lifecycle ----------------------------------------------------------
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
             return
+        self._boot_time = time.time()  # don't auto-join meetings already past now
         self._stop.clear()
         self._thread = threading.Thread(target=self._loop, daemon=True,
                                         name="vtx-scheduler")
@@ -73,6 +75,13 @@ class Scheduler:
                 self._states.values(),
                 key=lambda s: (s.start is None, s.start or datetime.max.replace(
                     tzinfo=timezone.utc)))]
+        # Don't let old "missed" meetings pile up: keep only the single most
+        # recent one, plus everything else (upcoming / in-progress / done).
+        missed = [m for m in meetings if m.get("state") == "missed"]
+        if len(missed) > 1:
+            latest = max(missed, key=lambda m: m.get("start") or "")
+            meetings = [m for m in meetings
+                        if m.get("state") != "missed" or m is latest]
         return {"running": bool(self._thread and self._thread.is_alive()),
                 "enabled": bool(cfg.get("enabled")),
                 "recording": self._recording.locked(),
@@ -116,6 +125,45 @@ class Scheduler:
                 elif st.state == "scheduled":
                     st.url, st.title, st.start = m.url, m.title, m.start
 
+    @staticmethod
+    def _kw(raw) -> list[str]:
+        text = str(raw or "").replace("\n", ",")
+        return [w.strip().lower() for w in text.split(",") if w.strip()]
+
+    def _passes_filter(self, st: "MeetingState", cfg: dict) -> tuple[bool, str]:
+        """Apply the user's "which meetings to record" rules. Empty = record all.
+
+        A per-meeting manual choice wins over everything: explicitly ON always
+        records, explicitly OFF never does. With no choice, the default mode
+        applies (record all, or record only chosen), then the keyword/time rules.
+        """
+        dec = (cfg.get("rec_decisions") or {}).get(str(st.task_id))
+        if dec is True:
+            return True, ""
+        if dec is False:
+            return False, "выключена вручную"
+        if not cfg.get("rec_default_on", True):
+            return False, "режим «только выбранные» — не отмечена"
+        title = (st.title or "").lower()
+        exc = self._kw(cfg.get("rec_exclude"))
+        if exc and any(k in title for k in exc):
+            return False, "исключено по слову в названии"
+        inc = self._kw(cfg.get("rec_include"))
+        if inc and not any(k in title for k in inc):
+            return False, "название не содержит нужных слов"
+        if st.start is not None:
+            local = st.start.astimezone(self._tz(cfg))
+            days = cfg.get("rec_days") or []
+            if days and local.weekday() not in [int(d) for d in days]:
+                return False, "день недели не выбран"
+            frm = (cfg.get("rec_time_from") or "").strip()
+            to = (cfg.get("rec_time_to") or "").strip()
+            if frm or to:
+                hm = local.strftime("%H:%M")
+                if not ((frm or "00:00") <= hm <= (to or "23:59")):
+                    return False, f"время {hm} вне окна {frm or '00:00'}–{to or '23:59'}"
+        return True, ""
+
     def _maybe_trigger(self, cfg: dict) -> None:
         if self._recording.locked():
             return
@@ -127,20 +175,40 @@ class Scheduler:
                 if st.state != "scheduled" or st.start is None:
                     continue
                 start = st.start.timestamp()
+                # Don't auto-join a meeting that was already past when the app
+                # started this session (e.g. a stale meeting after a restart) —
+                # only record meetings that come due while we're running.
+                if start < self._boot_time:
+                    st.state, st.detail = "missed", "Началась до запуска приложения — пропущено."
+                    continue
                 if now < start - lookahead:
                     continue  # not yet
                 if now > start + _LATE_GRACE_SEC:
                     st.state, st.detail = "missed", "Время начала прошло — пропущено."
                     continue
+                ok, why = self._passes_filter(st, cfg)
+                if not ok:
+                    st.state, st.detail = "skipped", f"Не записываем: {why}."
+                    continue
                 candidates.append((start, st))
         if candidates:
             candidates.sort(key=lambda x: x[0])  # earliest-starting first
-            threading.Thread(target=self._run, args=(candidates[0][1],),
-                             daemon=True).start()
+            chosen = candidates[0][1]
+            # Claim it atomically: flip "scheduled" -> "recording" under the lock
+            # BEFORE spawning the worker, so the next tick (and the poller) see it
+            # is taken and never start a second browser for the same meeting.
+            with self._lock:
+                if chosen.state != "scheduled":
+                    return
+                chosen.state, chosen.detail = "recording", "Бот заходит на встречу…"
+            threading.Thread(target=self._run, args=(chosen,), daemon=True).start()
 
     # -- per-meeting pipeline ----------------------------------------------
     def _run(self, st: MeetingState) -> None:
         if not self._recording.acquire(blocking=False):
+            # Another recording is in progress; release our claim so this meeting
+            # can be retried on a later tick instead of getting stuck "recording".
+            self._set(st, "scheduled", "")
             return
         try:
             from . import recorder
@@ -148,9 +216,14 @@ class Scheduler:
             self._stop_recording.clear()  # fresh manual-stop flag per recording
 
             def log(msg: str) -> None:
-                st.logs.append(str(msg))
+                msg = str(msg)
+                st.logs.append(msg)
+                # Surface live progress on the card instead of a frozen
+                # "joining…" line (skip the very verbose ffmpeg command dump).
+                if not msg.startswith("ffmpeg:"):
+                    self._set(st, "recording", msg)
 
-            self._set(st, "recording", "Бот заходит и записывает встречу…")
+            self._set(st, "recording", "Бот заходит на встречу…")
             stamp = time.strftime("%Y%m%d-%H%M%S")
             safe = "".join(c for c in str(st.title) if c.isalnum() or c in " -_")[:40].strip()
             rec_dir = config.DATA_DIR / "recordings"
@@ -165,6 +238,7 @@ class Scheduler:
             if not res.get("ok"):
                 self._set(st, "error", res.get("error") or "Запись не удалась.")
                 return
+            out = res.get("path") or out  # telemost mode may save .webm, not .mp4
 
             # Upload to the chosen cloud (best effort — failure isn't fatal).
             self._set(st, "uploading", "Выгружаю запись в облако…")
@@ -225,6 +299,24 @@ class Scheduler:
         self._stop_recording.set()
         return {"ok": True, "detail": "Останавливаю запись…"}
 
+    def set_decision(self, task_id: str, record) -> dict:
+        """Record/skip a specific meeting. `record` is True, False, or None
+        (clear the override → fall back to the default mode)."""
+        cfg = auto_settings.load()
+        decisions = dict(cfg.get("rec_decisions") or {})
+        if record is None:
+            decisions.pop(str(task_id), None)
+        else:
+            decisions[str(task_id)] = bool(record)
+        auto_settings.save({"rec_decisions": decisions})
+        # If we'd already skipped it, allow a re-evaluation on the next tick.
+        with self._lock:
+            for st in self._states.values():
+                if str(st.task_id) == str(task_id) and st.state in ("skipped", "missed"):
+                    if st.start is not None and st.start.timestamp() >= self._boot_time:
+                        st.state, st.detail = "scheduled", ""
+        return {"ok": True, "task_id": str(task_id), "record": record}
+
     def run_now(self, task_id: str) -> dict:
         """Manually trigger recording for a known meeting task (for testing)."""
         with self._lock:
@@ -234,7 +326,9 @@ class Scheduler:
             return {"ok": False, "error": "Встреча не найдена (сначала опрос Weeek)."}
         if self._recording.locked():
             return {"ok": False, "error": "Уже идёт запись другой встречи."}
-        st.state = "scheduled"
+        # Claim before spawning so a concurrent tick can't double-launch.
+        with self._lock:
+            st.state, st.detail = "recording", "Бот заходит на встречу…"
         threading.Thread(target=self._run, args=(st,), daemon=True).start()
         return {"ok": True, "detail": "Запись запущена."}
 

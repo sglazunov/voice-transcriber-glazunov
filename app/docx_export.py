@@ -6,11 +6,11 @@ from pathlib import Path
 from typing import List, Optional
 
 
-def _task_parts(item) -> tuple[str, str]:
-    """Return (text, owner) for a task, tolerating plain strings or dicts."""
+def _task_text(item) -> str:
+    """Return a task's text, tolerating plain strings or (old) dicts."""
     if isinstance(item, dict):
-        return (str(item.get("task") or "").strip(), str(item.get("owner") or "").strip())
-    return (str(item).strip(), "")
+        return str(item.get("task") or item.get("text") or "").strip()
+    return str(item).strip()
 
 
 def _fmt_time(seconds: float) -> str:
@@ -76,22 +76,6 @@ def generate_report(
 
     doc.add_paragraph()  # spacer
 
-    # ---- Участники ----------------------------------------------------------
-    participants = analysis.get("participants", [])
-    if participants:
-        doc.add_heading("Участники", level=1)
-        for pt in participants:
-            name = (pt.get("name") or "").strip() if isinstance(pt, dict) else str(pt).strip()
-            role = (pt.get("role") or "").strip() if isinstance(pt, dict) else ""
-            if not name:
-                continue
-            bp = doc.add_paragraph(style="List Bullet")
-            bp.add_run(name).bold = True
-            if role:
-                r = bp.add_run(f" — {role}")
-                r.italic = True
-                r.font.color.rgb = RGBColor(0x60, 0x60, 0x60)
-
     # ---- О чём шёл разговор -------------------------------------------------
     doc.add_heading("О чём шёл разговор", level=1)
     p = doc.add_paragraph(analysis.get("summary", ""))
@@ -141,28 +125,23 @@ def generate_report(
     if done_tasks:
         doc.add_heading("Сделано (выполненные задачи)", level=1)
         for item in done_tasks:
-            text, owner = _task_parts(item)
-            bp = doc.add_paragraph(style="List Bullet")
-            bp.add_run(f"☑ {text}")
-            if owner:
-                r = bp.add_run(f"  — {owner}")
-                r.italic = True
-                r.font.color.rgb = RGBColor(0x60, 0x60, 0x60)
+            text = _task_text(item)
+            if text:
+                doc.add_paragraph(style="List Bullet").add_run(f"☑ {text}")
 
-    # ---- Задачи (нужно сделать): таблица с ответственными ------------------
+    # ---- Задачи (нужно сделать): нумерованный список ------------------------
     tasks = analysis.get("tasks", [])
     doc.add_heading("Задачи (нужно сделать)", level=1)
     if tasks:
-        table = doc.add_table(rows=1, cols=3)
+        table = doc.add_table(rows=1, cols=2)
         table.style = "Table Grid"
-        for cell, title in zip(table.rows[0].cells, ("№", "Задача", "Ответственный")):
+        for cell, title in zip(table.rows[0].cells, ("№", "Задача")):
             cell.paragraphs[0].add_run(title).bold = True
         for i, item in enumerate(tasks, 1):
-            text, owner = _task_parts(item)
+            text = _task_text(item)
             row = table.add_row().cells
             row[0].paragraphs[0].add_run(str(i))
             row[1].paragraphs[0].add_run(text)
-            row[2].paragraphs[0].add_run(owner or "—")
         doc.add_paragraph().paragraph_format.space_after = Pt(6)
     else:
         doc.add_paragraph("Задач не выявлено.").paragraph_format.space_after = Pt(6)
@@ -172,13 +151,9 @@ def generate_report(
     if minor:
         doc.add_heading("Мелкие задачи и доработки", level=1)
         for item in minor:
-            text, owner = _task_parts(item)
-            bp = doc.add_paragraph(style="List Bullet")
-            bp.add_run(f"☐ {text}")
-            if owner:
-                r = bp.add_run(f"  — {owner}")
-                r.italic = True
-                r.font.color.rgb = RGBColor(0x60, 0x60, 0x60)
+            text = _task_text(item)
+            if text:
+                doc.add_paragraph(style="List Bullet").add_run(f"☐ {text}")
 
     # ---- Full transcript on new page ----------------------------------------
     doc.add_page_break()

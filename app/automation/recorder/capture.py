@@ -61,11 +61,40 @@ def _parse_dshow_audio(stderr: str) -> list[str]:
     return names
 
 
-def build_ffmpeg_cmd(out_path: str, cfg: dict) -> list[str]:
+def test_audio_level(ffmpeg: str, device: str, seconds: int = 3) -> dict:
+    """Record `seconds` from `device` and measure its volume (silence detector).
+
+    Lets the UI tell the user whether the meeting's sound actually reaches the
+    chosen device, instead of finding out only after a recording came out mute.
+    """
+    if not device:
+        return {"ok": False, "error": "Не выбрано аудио-устройство."}
+    try:
+        proc = subprocess.run(
+            [ffmpeg, "-hide_banner", "-f", "dshow", "-i", f"audio={device}",
+             "-t", str(seconds), "-af", "volumedetect", "-f", "null", "-"],
+            capture_output=True, text=True, errors="replace", timeout=seconds + 25)
+    except FileNotFoundError:
+        return {"ok": False, "error": "ffmpeg не найден."}
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "error": "Таймаут проверки."}
+    err = proc.stderr or ""
+    m_mean = re.search(r"mean_volume:\s*(-?[\d.]+) dB", err)
+    m_max = re.search(r"max_volume:\s*(-?[\d.]+) dB", err)
+    max_db = float(m_max.group(1)) if m_max else None
+    mean_db = float(m_mean.group(1)) if m_mean else None
+    if max_db is None:
+        return {"ok": False, "error": "Не удалось открыть устройство: "
+                + " ".join(err.strip().splitlines()[-2:])[:200]}
+    has_sound = max_db > -80.0
+    return {"ok": True, "has_sound": has_sound, "max_db": max_db, "mean_db": mean_db}
+
+
+def build_ffmpeg_cmd(out_path: str, cfg: dict, window_title: str | None = None) -> list[str]:
     """Build the ffmpeg capture command from settings.
 
-    Records desktop video (if capture_video) and the configured audio device
-    into a single mp4. Audio-only falls back to .m4a-style aac in mp4.
+    Records video (just the browser window if `window_title` is given, else the
+    whole desktop) and the configured audio device into one mp4.
     """
     ffmpeg = cfg.get("ffmpeg_path") or "ffmpeg"
     audio = (cfg.get("audio_device") or "").strip()
@@ -73,7 +102,10 @@ def build_ffmpeg_cmd(out_path: str, cfg: dict) -> list[str]:
 
     cmd = [ffmpeg, "-y", "-hide_banner"]
     if capture_video:
-        cmd += ["-f", "gdigrab", "-framerate", "10", "-i", "desktop"]
+        # Capture only the meeting's browser window (cleaner than the whole
+        # desktop); fall back to the full desktop if no title is known.
+        src = f"title={window_title}" if window_title else "desktop"
+        cmd += ["-f", "gdigrab", "-framerate", "10", "-i", src]
     if audio:
         cmd += ["-f", "dshow", "-i", f"audio={audio}"]
     if capture_video:
@@ -92,9 +124,18 @@ def readiness(cfg: dict) -> dict:
     audio = (cfg.get("audio_device") or "").strip()
     if not audio:
         devices = list_audio_devices(ffmpeg)
-        hint = ("Выберите аудио-устройство (loopback/виртуальный кабель). "
-                f"Найдено: {devices}" if devices else
-                "Не задано аудио-устройство и не найдено ни одного dshow-устройства.")
+        keys = ("cable", "voicemeeter", "stereo mix", "стерео микшер",
+                "loopback", "what u hear", "what you hear")
+        has_loop = any(any(k in d.lower() for k in keys) for d in devices)
+        if has_loop:
+            hint = f"Выберите аудио-устройство из списка (есть подходящее). Найдено: {devices}"
+        elif devices:
+            hint = ("Нет виртуального аудио-устройства для записи звука встречи. "
+                    "Нажмите «Установить виртуальное аудио (VB-CABLE)» ниже, "
+                    f"либо выберите подходящее вручную. Найдено: {devices}")
+        else:
+            hint = ("Нет ни одного аудио-устройства для захвата. Нажмите "
+                    "«Установить виртуальное аудио (VB-CABLE)» ниже.")
         return {"ready": False, "detail": hint, "devices": devices}
     return {"ready": True, "detail": f"ffmpeg + аудио: {audio}"}
 
@@ -102,18 +143,33 @@ def readiness(cfg: dict) -> dict:
 class FFmpegRecorder:
     """Start/stop an ffmpeg capture, finalising the file cleanly on stop."""
 
-    def __init__(self, out_path: str, cfg: dict, on_log=None):
+    def __init__(self, out_path: str, cfg: dict, on_log=None, window_title=None):
         self.out_path = out_path
         self.cfg = cfg
         self._on_log = on_log or (lambda *_: None)
         self._proc: subprocess.Popen | None = None
+        self.window_title = window_title
+        self._log_path = out_path + ".ffmpeg.log"
+        self._log_file = None
 
     def start(self) -> None:
-        cmd = build_ffmpeg_cmd(self.out_path, self.cfg)
+        cmd = build_ffmpeg_cmd(self.out_path, self.cfg, self.window_title)
         self._on_log("ffmpeg: " + " ".join(cmd))
+        # Keep ffmpeg's stderr in a log so an immediate failure (window not
+        # found, bad audio device) is diagnosable instead of a silent empty file.
+        self._log_file = open(self._log_path, "w", encoding="utf-8", errors="replace")
         self._proc = subprocess.Popen(
             cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL)
+            stderr=self._log_file)
+
+    def error_tail(self, lines: int = 6) -> str:
+        try:
+            if self._log_file:
+                self._log_file.flush()
+            with open(self._log_path, "r", encoding="utf-8", errors="replace") as f:
+                return " | ".join(t.strip() for t in f.read().splitlines()[-lines:] if t.strip())
+        except Exception:
+            return ""
 
     def stop(self, timeout: int = 15) -> None:
         if not self._proc:
@@ -132,6 +188,11 @@ class FFmpegRecorder:
                 self._proc.kill()
         finally:
             self._proc = None
+            try:
+                if self._log_file:
+                    self._log_file.close()
+            except Exception:
+                pass
 
     @property
     def running(self) -> bool:
