@@ -96,12 +96,17 @@ _REC_STOP = [
     'text="Остановить запись"', 'text=Остановить запись',
     'button:has-text("Остановить запись")', 'text=Завершить запись',
 ]
-# Launch args: auto-accept mic/cam prompts; fake mic so we never send real audio.
+# Launch args: auto-accept mic/cam prompts; fake mic so we never send real audio;
+# suppress the noisy first-run/default-browser/translate popups that would
+# otherwise show up in the recording.
 _LAUNCH_ARGS = [
     "--use-fake-ui-for-media-stream",
     "--use-fake-device-for-media-stream",
     "--autoplay-policy=no-user-gesture-required",
     "--disable-blink-features=AutomationControlled",
+    "--no-first-run",
+    "--no-default-browser-check",
+    "--disable-features=Translate,TranslateUI",
 ]
 
 
