@@ -870,12 +870,11 @@ function renderSegments(el,segs){
 }
 
 /* ---------- analysis block ---------- */
-function taskParts(t){
-  if(t&&typeof t==='object')return{text:String(t.task||''),owner:String(t.owner||'')};
-  return{text:String(t||''),owner:''};
+function taskText(t){
+  if(t&&typeof t==='object')return String(t.task||t.text||'');
+  return String(t||'');
 }
-function taskHtml(t){const p=taskParts(t);
-  return esc(p.text)+(p.owner?` — <i style="color:var(--muted)">${esc(p.owner)}</i>`:'');}
+function taskHtml(t){return esc(taskText(t));}
 function renderAnalysis(job){
   const block=$('analysisBlock');
   if(!job.analyze){block.classList.add('hidden');return;}
@@ -905,14 +904,6 @@ function renderAnalysis(job){
   } else if(a.summary){
     const prov=prettyProvider(a._provider);
     if(prov)html+=`<div class="muted" style="margin-bottom:8px">🤖 Движок: ${esc(prov)}</div>`;
-    if(a.participants&&a.participants.length){
-      const items=a.participants.map(p=>{
-        const n=(p&&typeof p==='object')?(p.name||''):String(p);
-        const r=(p&&typeof p==='object')?(p.role||''):'';
-        return `<li><b>${esc(n)}</b>${r?` — <i style="color:var(--muted)">${esc(r)}</i>`:''}</li>`;
-      }).join('');
-      html+=`<div class="analysis-section"><h3>Участники</h3><ul>${items}</ul></div>`;
-    }
     html+=`<div class="analysis-section"><h3>О чём шёл разговор</h3><p>${esc(a.summary)}</p></div>`;
 
     if(a.detailed&&a.detailed.length){
@@ -943,12 +934,11 @@ function renderAnalysis(job){
       html+=`<div class="analysis-section"><h3>Сделано (выполненные задачи)</h3><ul>${items}</ul></div>`;
     }
     if(a.tasks&&a.tasks.length){
-      const rows=a.tasks.map((t,i)=>{const p=taskParts(t);
-        return `<tr><td style="width:28px;text-align:right;color:var(--muted)">${i+1}</td>`+
-               `<td>${esc(p.text)}</td>`+
-               `<td style="white-space:nowrap"><b>${p.owner?esc(p.owner):'—'}</b></td></tr>`;}).join('');
+      const rows=a.tasks.map((t,i)=>
+        `<tr><td style="width:28px;text-align:right;color:var(--muted)">${i+1}</td>`+
+        `<td>${esc(taskText(t))}</td></tr>`).join('');
       html+=`<div class="analysis-section"><h3>Задачи (нужно сделать)</h3>
-        <table><thead><tr><th>№</th><th>Задача</th><th>Ответственный</th></tr></thead>
+        <table><thead><tr><th>№</th><th>Задача</th></tr></thead>
         <tbody>${rows}</tbody></table></div>`;
     } else {
       html+=`<div class="analysis-section"><h3>Задачи (нужно сделать)</h3><p class="empty">Задач не выявлено</p></div>`;
