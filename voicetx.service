@@ -1,23 +1,25 @@
+# Reference template. `deploy.sh` generates this unit automatically with the
+# right user/path/port, so normally you do NOT edit it by hand. Use it only for
+# a manual install:
+#   sudo cp voicetx.service /etc/systemd/system/   (after editing the marked lines)
+#   sudo systemctl daemon-reload && sudo systemctl enable --now voicetx
 [Unit]
-Description=Voice Transcriber (faster-whisper web service)
+Description=Voice Transcriber (speech-to-text + meeting protocols)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-# --- EDIT these two lines to match your setup ---
-User=admin1
-WorkingDirectory=/home/admin1/voice-transcriber
-# ------------------------------------------------
-Environment=VTX_MODEL=small
+# --- EDIT these to match your server ---
+User=CHANGE_ME
+WorkingDirectory=/home/CHANGE_ME/voice-transcriber
+ExecStart=/home/CHANGE_ME/voice-transcriber/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+# ---------------------------------------
+Environment=VTX_MODEL=medium
 Environment=VTX_COMPUTE_TYPE=int8
-Environment=VTX_CPU_THREADS=4
-Environment=VTX_BEAM_SIZE=1
-# Diarization stays off until a RAM upgrade:
-Environment=VTX_DIARIZATION=0
-# Cap memory so a runaway job can't freeze the whole laptop (needs cgroups v2):
-MemoryMax=3200M
-ExecStart=/home/admin1/voice-transcriber/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+Environment=PYTHONUNBUFFERED=1
+# Note: do NOT set a tight MemoryMax here — medium/large-v3 need several GB
+# while transcribing and systemd would OOM-kill the job mid-run.
 Restart=on-failure
 RestartSec=5
 
